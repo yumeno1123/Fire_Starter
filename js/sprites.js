@@ -259,7 +259,18 @@ export class SpriteRenderer {
     }
   }
 
-  drawPolice(ctx, x, y, dir = 'DOWN', isAlert = false, walkFrame = 0) {
+  drawStunStars(ctx, x, y) {
+    const t = Date.now() / 120;
+    const off1 = Math.sin(t) * 4;
+    const off2 = Math.cos(t) * 3;
+    ctx.fillStyle = this.p.c3;
+    ctx.fillRect(x + 4 + off1, y - 6, 2, 2);
+    ctx.fillRect(x + 10 - off1, y - 6, 2, 2);
+    ctx.fillStyle = this.p.c2;
+    ctx.fillRect(x + 7 + off2, y - 8, 2, 2);
+  }
+
+  drawPolice(ctx, x, y, dir = 'DOWN', isAlert = false, walkFrame = 0, isStunned = false) {
     // Police Officer: Cap, badge, uniform
     const sprite = [
       '....2222222.....', // cap visor
@@ -283,15 +294,17 @@ export class SpriteRenderer {
     const flip = (dir === 'LEFT');
     this.drawMatrix(ctx, sprite, x, y, flip);
 
-    // Alert indicator "!" above police when alerted
-    if (isAlert) {
+    if (isStunned) {
+      this.drawStunStars(ctx, x, y);
+    } else if (isAlert) {
+      // Alert indicator "!" above police when alerted
       ctx.fillStyle = this.p.c3;
       ctx.fillRect(x + 7, y - 6, 2, 4);
       ctx.fillRect(x + 7, y - 1, 2, 2);
     }
   }
 
-  drawFirefighter(ctx, x, y, dir = 'DOWN', isSpraying = false, walkFrame = 0) {
+  drawFirefighter(ctx, x, y, dir = 'DOWN', isSpraying = false, walkFrame = 0, isStunned = false) {
     // Firefighter: Helmet with stripe, jacket, boots
     const sprite = [
       '....2333332.....', // yellow helmet
@@ -315,8 +328,9 @@ export class SpriteRenderer {
     const flip = (dir === 'LEFT');
     this.drawMatrix(ctx, sprite, x, y, flip);
 
-    // Water spray animation when actively extinguishing
-    if (isSpraying) {
+    if (isStunned) {
+      this.drawStunStars(ctx, x, y);
+    } else if (isSpraying) {
       ctx.fillStyle = this.p.c3;
       if (dir === 'RIGHT') {
         ctx.fillRect(x + 16, y + 7, 8, 2);

@@ -183,3 +183,49 @@ test('TimeBomb: detonation clears 5x5 area into ash', () => {
   assert.equal(city.grid[4][4], TILES.ASH);
   assert.equal(city.grid[6][6], TILES.ASH);
 });
+
+test('Stun Mechanics: Bomb & Molotov stun enemies and disable arrest', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+
+  const police = new Police(5, 4);
+  const firefighter = new Firefighter(6, 5);
+  const enemies = [police, firefighter];
+
+  let stunTriggered = false;
+  const bomb = new TimeBomb(5, 5, 0.05);
+  bomb.update(0.1, city, mockAudio, enemies, () => {
+    stunTriggered = true;
+  });
+
+  assert.equal(stunTriggered, true, 'Bomb explosion should trigger stun callback');
+  assert.ok(police.stunTimer > 0, 'Police must be stunned by blast');
+  assert.ok(firefighter.stunTimer > 0, 'Firefighter must be stunned by blast');
+
+  // Verify that stunned police cannot arrest player even on direct overlap
+  const player = new Player(5, 4);
+  assert.equal(police.checkPlayerCollision(player), false, 'Stunned police must not arrest player');
+});
+
+test('Stealth: fire/smoke blocks police line of sight', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+
+  const police = new Police(2, 2);
+  police.dir = 'RIGHT';
+  const player = new Player(5, 2);
+
+  // Clear line of sight initially
+  assert.equal(police.hasLineOfSight(player.getTile(), city), true);
+
+  // Set fire between them at (3, 2)
+  city.fireTimer[2][3] = 3.0;
+
+  // Active fire/smoke should obscure line of sight
+  assert.equal(police.hasLineOfSight(player.getTile(), city), false, 'Fire and smoke must block line of sight');
+});
+

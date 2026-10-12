@@ -189,7 +189,7 @@ export class City {
 
     // 2. Fire Simulation & Damage
     this.fireTickTimer += dt;
-    const isSpreadTick = this.fireTickTimer >= 0.5;
+    const isSpreadTick = this.fireTickTimer >= (BALANCE.FIRE_TICK_INTERVAL || 0.30);
     if (isSpreadTick) this.fireTickTimer = 0;
 
     for (let r = 0; r < this.rows; r++) {

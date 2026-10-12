@@ -16,42 +16,44 @@ export const ITEMS = {
     id: 'MATCH',
     name: 'マッチ',
     shortName: 'MAT',
-    initialAmmo: 12,
-    spreadChance: 0.35,
-    burnDuration: 4.0,
+    initialAmmo: 15,
+    spreadChance: 0.55,
+    burnDuration: 4.5,
     range: 1,
-    desc: '足元・前方への着火。延焼は穏やか。'
+    desc: '足元・前方への着火。延焼速度アップ。'
   },
   LIGHTER: {
     id: 'LIGHTER',
     name: 'ジッポー',
     shortName: 'LGT',
-    initialAmmo: 5,
-    spreadChance: 0.70,
-    burnDuration: 5.5,
+    initialAmmo: 6,
+    spreadChance: 0.85,
+    burnDuration: 6.0,
     range: 1,
-    desc: '高熱で確実に着火。延焼力強し。'
+    desc: '高熱で確実に着火。周囲へ一気に延焼。'
   },
   MOLOTOV: {
     id: 'MOLOTOV',
     name: '火炎瓶',
     shortName: 'MLT',
-    initialAmmo: 3,
-    spreadChance: 0.60,
-    burnDuration: 5.0,
+    initialAmmo: 4,
+    spreadChance: 0.80,
+    burnDuration: 5.5,
+    stunDuration: 2.5,
     range: 3,
-    desc: '3マス先へ投擲。一画を一気に焼き払う。'
+    desc: '3マス先へ投擲。一画を爆砕延焼＆敵をスタン！'
   },
   TIME_BOMB: {
     id: 'TIME_BOMB',
     name: '時限爆弾',
     shortName: 'BMB',
-    initialAmmo: 2,
-    spreadChance: 0.85,
+    initialAmmo: 3,
+    spreadChance: 0.95,
     burnDuration: 6.0,
     countdown: 3.0,
+    stunDuration: 4.0,
     radius: 2,
-    desc: '設置後3秒で大爆砕。消防の包囲も崩す。'
+    desc: '設置後3秒で大爆砕。5x5区画を一掃＆敵を長時スタン！'
   }
 };
 
@@ -128,19 +130,22 @@ export const DEATH_REASONS = {
 
 export const BALANCE = {
   INITIAL_BUILDING_RATIO: 0.40, // 40% starting buildings
-  GROWTH_INTERVAL: 1.8,         // Seconds between growth ticks
-  GROWTH_ACCELERATION: 0.985,   // Interval shrinks slightly over time
-  MIN_GROWTH_INTERVAL: 0.6,
-  BURNING_DAMAGE_RATE: 0.25,    // Health per second damage to building
-  WATER_DURATION: 6.0,          // Wet tile cooldown
-  PLAYER_SPEED: 4.5,            // Tiles per second
-  PLAYER_DASH_SPEED: 7.2,       // Speed when sprinting
-  POLICE_SPEED_PATROL: 2.4,
-  POLICE_SPEED_CHASE: 4.8,
-  FIREFIGHTER_SPEED: 3.2,
-  DASH_STAMINA_DRAIN: 35,       // % per second
-  DASH_STAMINA_RECOVERY: 25,    // % per second
-  ITEM_DROP_CHANCE: 0.28,
+  GROWTH_INTERVAL: 2.0,         // Slightly more room to breathe initially
+  GROWTH_ACCELERATION: 0.988,   // Interval shrinks gently over time
+  MIN_GROWTH_INTERVAL: 0.7,
+  BURNING_DAMAGE_RATE: 0.55,    // Fast, crisp destruction rhythm (~1.8s to ash)
+  FIRE_TICK_INTERVAL: 0.30,     // Fast spreading tick
+  WATER_DURATION: 4.5,          // Wet tile cooldown
+  PLAYER_SPEED: 4.6,            // Tiles per second
+  PLAYER_DASH_SPEED: 7.5,       // Speedy sprint
+  POLICE_SPEED_PATROL: 2.2,
+  POLICE_SPEED_CHASE: 4.2,      // Manageable chase speed
+  POLICE_LOS_RANGE: 4.5,        // Detection radius
+  FIREFIGHTER_SPEED: 3.0,
+  DASH_STAMINA_DRAIN: 18,       // Stamina lasts 2x longer
+  DASH_STAMINA_RECOVERY: 35,    // Recovers much faster
+  ITEM_DROP_CHANCE: 0.42,       // 42% item drops from burned buildings
+  STUN_SCORE_BONUS: 250,        // Bonus tribute score for stunning enemies
   DANGER_LOW_BUILDING: 0.05,    // 5% -> risk of full burn
-  DANGER_HIGH_BUILDING: 0.88    // 88% -> risk of crushing
+  DANGER_HIGH_BUILDING: 0.90    // 90% -> risk of crushing
 };

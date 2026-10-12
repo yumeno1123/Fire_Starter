@@ -193,6 +193,13 @@ class SoundSystem {
     setTimeout(() => this.playTone(1046, 'square', 0.12, 0.35), 130);
   }
 
+  sfxStun() {
+    this.ensureContext();
+    this.playTone(1500, 'sine', 0.08, 0.2, 1800);
+    setTimeout(() => this.playTone(2000, 'sine', 0.08, 0.22, 2400), 70);
+    setTimeout(() => this.playTone(2600, 'sine', 0.12, 0.25, 3000), 140);
+  }
+
   sfxDash() {
     this.ensureContext();
     this.playNoise(0.06, 0.15, 1000);

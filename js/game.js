@@ -54,6 +54,15 @@ export class Game {
 
     // Particle FX (retro smoke and sparks)
     this.particles = [];
+
+    // Screen Shake FX
+    this.shakeTimer = 0;
+    this.shakeIntensity = 0;
+  }
+
+  triggerShake(duration = 0.3, intensity = 4) {
+    this.shakeTimer = duration;
+    this.shakeIntensity = intensity;
   }
 
   cyclePalette() {
@@ -203,6 +212,12 @@ export class Game {
       }
     }
 
+    // Screen Shake decay
+    if (this.shakeTimer > 0) {
+      this.shakeTimer -= dt;
+      if (this.shakeTimer <= 0) this.shakeIntensity = 0;
+    }
+
     // 1. Update Player
     this.player.update(dt, input, this.city);
     if (this.player.dashing) {
@@ -226,18 +241,31 @@ export class Game {
       // Building incinerated callback
       this.addTributeScore(100);
       this.spawnParticle(bx * TILE_SIZE + 8, by * TILE_SIZE + 8, 'fire_burst');
+      this.triggerShake(0.12, 1.5);
     });
 
     // 3. Update Projectiles & Bombs
+    const enemies = [...this.policeUnits, ...this.firefighters];
+
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i];
-      proj.update(dt, this.city, audio);
+      proj.update(dt, this.city, audio, enemies, (stunnedEnemy) => {
+        audio.sfxStun();
+        this.addTributeScore(BALANCE.STUN_SCORE_BONUS || 250);
+        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, 'STUN! +250');
+        this.triggerShake(0.25, 3);
+      });
       if (proj.isDead) this.projectiles.splice(i, 1);
     }
 
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const bomb = this.bombs[i];
-      bomb.update(dt, this.city, audio);
+      bomb.update(dt, this.city, audio, enemies, (stunnedEnemy) => {
+        audio.sfxStun();
+        this.addTributeScore(BALANCE.STUN_SCORE_BONUS || 250);
+        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, 'BLAST STUN! +250');
+        this.triggerShake(0.4, 5);
+      });
       if (bomb.isDead) this.bombs.splice(i, 1);
     }
 
@@ -350,6 +378,14 @@ export class Game {
       return;
     }
 
+    // Apply Screen Shake for Game World
+    ctx.save();
+    if (this.shakeTimer > 0) {
+      const sx = (Math.random() - 0.5) * this.shakeIntensity;
+      const sy = (Math.random() - 0.5) * this.shakeIntensity;
+      ctx.translate(Math.round(sx), Math.round(sy));
+    }
+
     // 1. Draw Grid Tiles
     for (let r = 0; r < this.city.rows; r++) {
       for (let c = 0; c < this.city.cols; c++) {
@@ -400,12 +436,12 @@ export class Game {
 
     // 5. Draw Firefighters
     for (const ff of this.firefighters) {
-      this.renderer.drawFirefighter(ctx, ff.x * TILE_SIZE, ff.y * TILE_SIZE, ff.dir, ff.state === 'SPRAYING');
+      this.renderer.drawFirefighter(ctx, ff.x * TILE_SIZE, ff.y * TILE_SIZE, ff.dir, ff.state === 'SPRAYING', 0, ff.stunTimer > 0);
     }
 
     // 6. Draw Police
     for (const police of this.policeUnits) {
-      this.renderer.drawPolice(ctx, police.x * TILE_SIZE, police.y * TILE_SIZE, police.dir, police.state === 'CHASE');
+      this.renderer.drawPolice(ctx, police.x * TILE_SIZE, police.y * TILE_SIZE, police.dir, police.state === 'CHASE', 0, police.stunTimer > 0);
     }
 
     // 7. Draw Player
@@ -432,6 +468,9 @@ export class Game {
         ctx.fillText(pt.text, pt.x, pt.y);
       }
     }
+
+    // End World Transform (Screen Shake)
+    ctx.restore();
 
     // 9. Draw In-Game HUD overlay
     this.renderHUD();

@@ -188,6 +188,7 @@ export class Police {
     this.dir = 'DOWN';
     this.state = 'PATROL'; // 'PATROL' or 'CHASE'
     this.alertTimer = 0;
+    this.stunTimer = 0;
     this.path = [];
     this.pathUpdateTimer = 0;
     this.patrolCooldown = 0;
@@ -195,14 +196,20 @@ export class Police {
     this.walkFrame = 0;
   }
 
+  stun(duration) {
+    this.stunTimer = Math.max(this.stunTimer, duration);
+    this.state = 'PATROL';
+    this.path = [];
+  }
+
   hasLineOfSight(playerTile, city) {
-    // Check if player is within vision cone (range: 5 tiles)
+    const losRange = BALANCE.POLICE_LOS_RANGE || 4.5;
     const myTile = { x: Math.round(this.x), y: Math.round(this.y) };
     const dx = playerTile.x - myTile.x;
     const dy = playerTile.y - myTile.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (dist > 5.5) return false;
+    if (dist > losRange) return false;
 
     // Check facing direction cone (45 degrees)
     if (this.dir === 'UP' && dy > 0) return false;
@@ -210,19 +217,27 @@ export class Police {
     if (this.dir === 'LEFT' && dx > 0) return false;
     if (this.dir === 'RIGHT' && dx < 0) return false;
 
-    // Raycast check for wall obstruction
+    // Raycast check for wall obstruction or thick fire/smoke
     const steps = Math.ceil(dist * 2);
     for (let i = 1; i < steps; i++) {
       const rx = Math.round(myTile.x + (dx * i) / steps);
       const ry = Math.round(myTile.y + (dy * i) / steps);
-      if (city.isValid(rx, ry) && city.grid[ry][rx] === TILES.BUILDING) {
-        return false; // Obstructed by concrete wall
+      if (city.isValid(rx, ry)) {
+        if (city.grid[ry][rx] === TILES.BUILDING || city.fireTimer[ry][rx] > 0) {
+          return false; // Obstructed by wall or smoke
+        }
       }
     }
     return true;
   }
 
   update(dt, player, city, audio) {
+    // If stunned by explosion or fire, completely incapacitated
+    if (this.stunTimer > 0) {
+      this.stunTimer -= dt;
+      return;
+    }
+
     const myTile = { x: Math.round(this.x), y: Math.round(this.y) };
     const playerTile = player.getTile();
 
@@ -234,7 +249,7 @@ export class Police {
         audio.sfxPoliceAlert();
       }
       this.state = 'CHASE';
-      this.alertTimer = 5.0; // Stay alert for 5 seconds after sighting
+      this.alertTimer = 4.0; // Stay alert for 4 seconds after sighting
     } else if (this.state === 'CHASE') {
       this.alertTimer -= dt;
       if (this.alertTimer <= 0) {
@@ -294,6 +309,7 @@ export class Police {
   }
 
   checkPlayerCollision(player) {
+    if (this.stunTimer > 0) return false; // Stunned police cannot arrest
     const dx = this.x - player.x;
     const dy = this.y - player.y;
     return Math.sqrt(dx * dx + dy * dy) < 0.65;
@@ -308,11 +324,26 @@ export class Firefighter {
     this.state = 'PATROL'; // 'PATROL', 'MOVING_TO_FIRE', 'SPRAYING'
     this.targetFire = null;
     this.sprayTimer = 0;
+    this.stunTimer = 0;
     this.path = [];
     this.pathTimer = 0;
   }
 
+  stun(duration) {
+    this.stunTimer = Math.max(this.stunTimer, duration);
+    this.state = 'PATROL';
+    this.targetFire = null;
+    this.sprayTimer = 0;
+    this.path = [];
+  }
+
   update(dt, city, audio) {
+    // If stunned by explosion or fire, completely incapacitated
+    if (this.stunTimer > 0) {
+      this.stunTimer -= dt;
+      return;
+    }
+
     const myTile = { x: Math.round(this.x), y: Math.round(this.y) };
 
     // 1. If currently spraying water
@@ -422,7 +453,7 @@ export class MolotovProjectile {
     this.isDead = false;
   }
 
-  update(dt, city, audio) {
+  update(dt, city, audio, enemies = [], onStun = null) {
     this.progress += dt * 3.5;
     this.x = this.startX + (this.targetX - this.startX) * this.progress;
     this.y = this.startY + (this.targetY - this.startY) * this.progress;
@@ -442,6 +473,16 @@ export class MolotovProjectile {
           }
         }
       }
+
+      // Stun any enemies in 3x3 impact radius
+      const stunDur = ITEMS.MOLOTOV.stunDuration || 2.5;
+      for (const enemy of enemies) {
+        const d = Math.hypot(enemy.x - hitX, enemy.y - hitY);
+        if (d <= 1.8) {
+          enemy.stun(stunDur);
+          if (onStun) onStun(enemy);
+        }
+      }
     }
   }
 }
@@ -457,7 +498,7 @@ export class TimeBomb {
     this.tickTimer = 0;
   }
 
-  update(dt, city, audio) {
+  update(dt, city, audio, enemies = [], onStun = null) {
     if (!this.exploded) {
       this.timeLeft -= dt;
       this.tickTimer += dt;
@@ -486,6 +527,16 @@ export class TimeBomb {
               }
               city.ignite(tx, ty, ITEMS.TIME_BOMB);
             }
+          }
+        }
+
+        // Stun all enemies within blast range (5x5)
+        const stunDur = ITEMS.TIME_BOMB.stunDuration || 4.0;
+        for (const enemy of enemies) {
+          const d = Math.hypot(enemy.x - this.x, enemy.y - this.y);
+          if (d <= 2.8) {
+            enemy.stun(stunDur);
+            if (onStun) onStun(enemy);
           }
         }
       }
