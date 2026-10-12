@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#081820">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="アニメ『フリクリ』作中携帯ゲーム『Fire Starter』Webアプリ版。黒き炎の神カンティードの僕となり、増殖する街エンズビルを焼き払え。">
+
+  <title>FIRE STARTER - フリクリ</title>
+
+  <!-- PWA Manifest & Favicon -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" href="./assets/favicon.png">
+  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div id="app-container">
+    <div id="device-body">
+      <!-- Upper Section: Screen Bezel & LCD -->
+      <div id="bezel-container">
+        <div id="bezel-header">
+          <div id="battery-indicator">
+            <span class="battery-led"></span>
+            <span class="battery-label">BATTERY</span>
+          </div>
+          <div id="bezel-title">DOT MATRIX WITH STEREO SOUND</div>
+        </div>
+
+        <div id="screen-frame">
+          <canvas id="game-screen" width="320" height="320"></canvas>
+          <div class="screen-scanlines"></div>
+        </div>
+
+        <div id="bezel-footer">
+          <span class="brand-text">CANTIDO <i>COMMUNICATION SYSTEM</i></span>
+        </div>
+      </div>
+
+      <!-- Lower Section: Retro Game Boy Style Controller -->
+      <div id="controls-container">
+        <!-- D-Pad (Left Side) -->
+        <div id="dpad-wrapper">
+          <div id="dpad">
+            <div class="dpad-cross">
+              <div class="dpad-btn dpad-up" data-dir="up">▲</div>
+              <div class="dpad-btn dpad-left" data-dir="left">◀</div>
+              <div class="dpad-center"></div>
+              <div class="dpad-btn dpad-right" data-dir="right">▶</div>
+              <div class="dpad-btn dpad-down" data-dir="down">▼</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons A & B (Right Side) -->
+        <div id="action-buttons-wrapper">
+          <div class="action-btn-slot">
+            <button id="btn-b" class="action-btn" aria-label="B button">B</button>
+            <span class="btn-subtext">ITEM/DASH</span>
+          </div>
+          <div class="action-btn-slot">
+            <button id="btn-a" class="action-btn" aria-label="A button">A</button>
+            <span class="btn-subtext">IGNITE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Bar: SELECT, START, MUTE & Speaker Grille -->
+      <div id="sub-controls-container">
+        <div class="pill-btn-group">
+          <div class="pill-slot">
+            <button id="btn-select" class="pill-btn" aria-label="Select button"></button>
+            <span class="pill-label">SELECT</span>
+          </div>
+          <div class="pill-slot">
+            <button id="btn-start" class="pill-btn" aria-label="Start button"></button>
+            <span class="pill-label">START</span>
+          </div>
+          <div class="pill-slot">
+            <button id="btn-mute" class="pill-btn mute-btn" aria-label="Mute toggle"></button>
+            <span class="pill-label">MUTE</span>
+          </div>
+        </div>
+
+        <!-- Speaker Grille -->
+        <div id="speaker-grille">
+          <div class="grille-line"></div>
+          <div class="grille-line"></div>
+          <div class="grille-line"></div>
+          <div class="grille-line"></div>
+          <div class="grille-line"></div>
+          <div class="grille-line"></div>
+        </div>
+      </div>
+
+      <!-- Keyboard Guide (Shown neatly on PC/Desktop) -->
+      <div id="desktop-instructions">
+        <span>PC操作: [矢印キー/WASD] 移動 | [Z/Space] Aボタン(放火) | [X/Shift] Bボタン(切替/ダッシュ) | [Enter] START | [Tab] SELECT | [M] 音声切替</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
