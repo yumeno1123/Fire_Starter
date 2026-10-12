@@ -76,10 +76,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
   requestAnimationFrame(loop);
 
-  // Register PWA Service Worker
+  // Register PWA Service Worker & Force check for updates
   if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
     navigator.serviceWorker.register('./sw.js')
       .then((reg) => {
+        // Trigger background check for updated sw.js immediately
+        reg.update();
         console.log('Fire Starter SW registered with scope:', reg.scope);
       })
       .catch((err) => {
