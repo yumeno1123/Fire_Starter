@@ -68,16 +68,18 @@
 
 ## 4. 起動手順・動作確認方法
 
-Node.js環境またはPython環境があれば、ワンコマンドですぐにローカルサーバーを起動できます。
+### 方法1: バッチファイルを実行（最も簡単・おすすめ）
+フォルダ内の **[`起動.bat`](file:///C:/Users/Owner/Documents/myproject/Fire_Starter/起動.bat)** または **[`start.bat`](file:///C:/Users/Owner/Documents/myproject/Fire_Starter/start.bat)** をダブルクリックするだけです。
+自動的にローカルサーバーが立ち上がり、既定のブラウザでゲーム画面が開きます。
 
-### 方法A: Node.jsで起動（推奨）
+### 方法2: Node.jsで手動起動
 ```bash
 # プロジェクト直下で実行
 npm start
 ```
 起動後、ブラウザで [http://localhost:8080](http://localhost:8080) を開きます。
 
-### 方法B: Pythonで起動
+### 方法3: Pythonで手動起動
 ```bash
 python -m http.server 8080
 ```
