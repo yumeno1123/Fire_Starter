@@ -270,7 +270,7 @@ export class SpriteRenderer {
     ctx.fillRect(x + 7 + off2, y - 8, 2, 2);
   }
 
-  drawPolice(ctx, x, y, dir = 'DOWN', isAlert = false, walkFrame = 0, isStunned = false) {
+  drawPolice(ctx, x, y, dir = 'DOWN', isAlert = false, walkFrame = 0, isStunned = false, isRetreating = false) {
     // Police Officer: Cap, badge, uniform
     const sprite = [
       '....2222222.....', // cap visor
@@ -296,6 +296,15 @@ export class SpriteRenderer {
 
     if (isStunned) {
       this.drawStunStars(ctx, x, y);
+    } else if (isRetreating) {
+      // Panic sweat & "!?"
+      ctx.fillStyle = this.p.c3;
+      ctx.fillRect(x + 5, y - 7, 2, 4);
+      ctx.fillRect(x + 5, y - 2, 2, 2);
+      ctx.fillStyle = this.p.c2;
+      ctx.fillRect(x + 9, y - 7, 3, 2);
+      ctx.fillRect(x + 11, y - 5, 2, 2);
+      ctx.fillRect(x + 10, y - 2, 2, 2);
     } else if (isAlert) {
       // Alert indicator "!" above police when alerted
       ctx.fillStyle = this.p.c3;

@@ -130,11 +130,19 @@ export class Game {
     this.city.init(this.balance.INITIAL_BUILDING_RATIO, { x: 10, y: 10 }, this.balance);
     this.player.reset(10, 10, this.balance);
 
-    // Spawn 2 Police Officers on roads away from player
-    this.policeUnits = [
-      new Police(2, 2, this.balance),
-      new Police(17, 17, this.balance)
+    // Spawn Police Officers based on difficulty balance (EASY/NORMAL: 1, HARD: 2)
+    const policeCount = (this.balance && this.balance.POLICE_COUNT !== undefined)
+      ? this.balance.POLICE_COUNT
+      : 1;
+    const spawnPositions = [
+      { x: 17, y: 17 },
+      { x: 2, y: 2 }
     ];
+    this.policeUnits = [];
+    for (let i = 0; i < policeCount; i++) {
+      const pos = spawnPositions[i % spawnPositions.length];
+      this.policeUnits.push(new Police(pos.x, pos.y, this.balance));
+    }
 
     // Spawn 2 Firefighter units
     this.firefighters = [
@@ -349,38 +357,74 @@ export class Game {
     });
 
     // 3. Update Projectiles & Bombs
-    const enemies = [...this.policeUnits, ...this.firefighters];
+    const enemies = [
+      ...this.policeUnits.filter(p => p.state !== 'DESPAWNED'),
+      ...this.firefighters
+    ];
 
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i];
-      proj.update(dt, this.city, audio, enemies, (stunnedEnemy) => {
-        const bonus = (this.balance && this.balance.STUN_SCORE_BONUS) || BALANCE.STUN_SCORE_BONUS || 250;
-        audio.sfxStun();
-        this.addTributeScore(bonus);
-        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, `STUN! +${bonus}`);
-        this.triggerShake(0.25, 3);
+      proj.update(dt, this.city, audio, enemies, (hitEnemy) => {
+        if (hitEnemy instanceof Police) {
+          const bonus = (this.balance && this.balance.POLICE_BANISH_SCORE_BONUS) || 500;
+          hitEnemy.banish(this.city, audio);
+          this.addTributeScore(bonus);
+          this.spawnFloatingText(hitEnemy.x * TILE_SIZE, hitEnemy.y * TILE_SIZE - 6, `POLICE BANISHED! +${bonus}`);
+          this.triggerShake(0.35, 4);
+        } else {
+          const bonus = (this.balance && this.balance.STUN_SCORE_BONUS) || BALANCE.STUN_SCORE_BONUS || 250;
+          audio.sfxStun();
+          this.addTributeScore(bonus);
+          this.spawnFloatingText(hitEnemy.x * TILE_SIZE, hitEnemy.y * TILE_SIZE - 6, `STUN! +${bonus}`);
+          this.triggerShake(0.25, 3);
+        }
       });
       if (proj.isDead) this.projectiles.splice(i, 1);
     }
 
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const bomb = this.bombs[i];
-      bomb.update(dt, this.city, audio, enemies, (stunnedEnemy) => {
-        const bonus = (this.balance && this.balance.STUN_SCORE_BONUS) || BALANCE.STUN_SCORE_BONUS || 250;
-        audio.sfxStun();
-        this.addTributeScore(bonus);
-        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, `BLAST STUN! +${bonus}`);
-        this.triggerShake(0.4, 5);
+      bomb.update(dt, this.city, audio, enemies, (hitEnemy) => {
+        if (hitEnemy instanceof Police) {
+          const bonus = (this.balance && this.balance.POLICE_BANISH_SCORE_BONUS) || 500;
+          hitEnemy.banish(this.city, audio);
+          this.addTributeScore(bonus);
+          this.spawnFloatingText(hitEnemy.x * TILE_SIZE, hitEnemy.y * TILE_SIZE - 6, `BLAST BANISHED! +${bonus}`);
+          this.triggerShake(0.4, 5);
+        } else {
+          const bonus = (this.balance && this.balance.STUN_SCORE_BONUS) || BALANCE.STUN_SCORE_BONUS || 250;
+          audio.sfxStun();
+          this.addTributeScore(bonus);
+          this.spawnFloatingText(hitEnemy.x * TILE_SIZE, hitEnemy.y * TILE_SIZE - 6, `BLAST STUN! +${bonus}`);
+          this.triggerShake(0.4, 5);
+        }
       });
       if (bomb.isDead) this.bombs.splice(i, 1);
     }
 
-    // 4. Update Police Officers & Arrest Collision
+    // 4. Update Police Officers & Arrest / Breakaway Collision
     for (const police of this.policeUnits) {
-      police.update(dt, this.player, this.city, audio);
+      police.update(dt, this.player, this.city, audio, (banishedPolice) => {
+        const bonus = (this.balance && this.balance.POLICE_BANISH_SCORE_BONUS) || 500;
+        this.addTributeScore(bonus);
+        this.spawnFloatingText(banishedPolice.x * TILE_SIZE, banishedPolice.y * TILE_SIZE - 6, `FIRE BANISHED! +${bonus}`);
+        this.triggerShake(0.3, 3);
+      });
+
       if (police.checkPlayerCollision(this.player)) {
-        this.gameOver(DEATH_REASONS.ARRESTED);
-        return;
+        const breakCost = (this.balance && this.balance.POLICE_BREAKAWAY_STAMINA_COST) || 35;
+        if (this.player.stamina >= breakCost) {
+          // Breakaway / Shove tackle!
+          this.player.stamina -= breakCost;
+          police.shoveAway(this.player, this.city);
+          audio.sfxBreakAway();
+          this.triggerShake(0.35, 5);
+          this.spawnFloatingText(this.player.x * TILE_SIZE, this.player.y * TILE_SIZE - 10, `BREAK AWAY! -${breakCost} STM`);
+        } else {
+          // Out of stamina -> Arrested!
+          this.gameOver(DEATH_REASONS.ARRESTED);
+          return;
+        }
       }
     }
 
@@ -572,7 +616,17 @@ export class Game {
 
     // 6. Draw Police
     for (const police of this.policeUnits) {
-      this.renderer.drawPolice(ctx, police.x * TILE_SIZE, police.y * TILE_SIZE, police.dir, police.state === 'CHASE', 0, police.stunTimer > 0);
+      if (police.state === 'DESPAWNED') continue;
+      this.renderer.drawPolice(
+        ctx,
+        police.x * TILE_SIZE,
+        police.y * TILE_SIZE,
+        police.dir,
+        police.state === 'CHASE',
+        0,
+        police.stunTimer > 0,
+        police.state === 'RETREAT'
+      );
     }
 
     // 7. Draw Player

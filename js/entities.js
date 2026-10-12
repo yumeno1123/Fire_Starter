@@ -192,9 +192,11 @@ export class Police {
     this.y = y;
     this.balance = balance || BALANCE;
     this.dir = 'DOWN';
-    this.state = 'PATROL'; // 'PATROL' or 'CHASE'
+    this.state = 'PATROL'; // 'PATROL', 'CHASE', 'RETREAT', 'DESPAWNED'
     this.alertTimer = 0;
     this.stunTimer = 0;
+    this.retreatTimer = 0;
+    this.respawnTimer = 0;
     this.path = [];
     this.pathUpdateTimer = 0;
     this.patrolCooldown = 0;
@@ -204,11 +206,94 @@ export class Police {
 
   stun(duration) {
     this.stunTimer = Math.max(this.stunTimer, duration);
-    this.state = 'PATROL';
+    if (this.state !== 'RETREAT' && this.state !== 'DESPAWNED') {
+      this.state = 'PATROL';
+    }
     this.path = [];
   }
 
+  banish(city, audio) {
+    if (this.state === 'DESPAWNED') return;
+    this.state = 'RETREAT';
+    this.retreatTimer = 1.5;
+    this.alertTimer = 0;
+    this.path = [];
+    if (audio && typeof audio.sfxPolicePanic === 'function') {
+      audio.sfxPolicePanic();
+    }
+  }
+
+  shoveAway(player, city) {
+    // Breakaway knockback away from player
+    let dx = this.x - player.x;
+    let dy = this.y - player.y;
+    const len = Math.hypot(dx, dy);
+    if (len < 0.001) {
+      dx = 0;
+      dy = 1;
+    } else {
+      dx /= len;
+      dy /= len;
+    }
+
+    // Attempt push back by 1.8 tiles
+    const pushDist = 1.8;
+    const targetX = Math.round(this.x + dx * pushDist);
+    const targetY = Math.round(this.y + dy * pushDist);
+
+    if (city.isValid(targetX, targetY) && city.isWalkable(targetX, targetY)) {
+      this.x = targetX;
+      this.y = targetY;
+    }
+
+    const stunDuration = (this.balance && this.balance.POLICE_BREAKAWAY_STUN) || 1.8;
+    this.stun(stunDuration);
+    this.state = 'PATROL';
+    this.alertTimer = 0;
+    this.path = [];
+  }
+
+  respawn(city, player, audio) {
+    const pTile = player ? player.getTile() : { x: 10, y: 10 };
+    // Find valid road tile on outer perimeter furthest from player without fire
+    let bestTile = null;
+    let maxDist = -1;
+
+    for (let r = 0; r < city.rows; r++) {
+      for (let c = 0; c < city.cols; c++) {
+        const isEdge = (r <= 2 || r >= city.rows - 3 || c <= 2 || c >= city.cols - 3);
+        if (isEdge && city.isWalkable(c, r) && city.fireTimer[r][c] <= 0) {
+          const d = Math.hypot(c - pTile.x, r - pTile.y);
+          if (d > maxDist) {
+            maxDist = d;
+            bestTile = { x: c, y: r };
+          }
+        }
+      }
+    }
+
+    if (bestTile) {
+      this.x = bestTile.x;
+      this.y = bestTile.y;
+    } else {
+      this.x = 2;
+      this.y = 2;
+    }
+
+    this.state = 'PATROL';
+    this.stunTimer = 0;
+    this.alertTimer = 0;
+    this.retreatTimer = 0;
+    this.respawnTimer = 0;
+    this.path = [];
+    if (audio && typeof audio.sfxPoliceWhistle === 'function') {
+      audio.sfxPoliceWhistle();
+    }
+  }
+
   hasLineOfSight(playerTile, city) {
+    if (this.state === 'RETREAT' || this.state === 'DESPAWNED') return false;
+
     const losRange = (this.balance && this.balance.POLICE_LOS_RANGE) || 4.5;
     const myTile = { x: Math.round(this.x), y: Math.round(this.y) };
     const dx = playerTile.x - myTile.x;
@@ -237,25 +322,73 @@ export class Police {
     return true;
   }
 
-  update(dt, player, city, audio) {
-    // If stunned by explosion or fire, completely incapacitated
+  update(dt, player, city, audio, onBanish = null) {
+    // 0. Handle Despawned & Respawn Timer
+    if (this.state === 'DESPAWNED') {
+      this.respawnTimer -= dt;
+      if (this.respawnTimer <= 0) {
+        this.respawn(city, player, audio);
+      }
+      return;
+    }
+
+    // 0b. Handle Panic Retreat
+    if (this.state === 'RETREAT') {
+      this.retreatTimer -= dt;
+      if (this.retreatTimer <= 0) {
+        this.state = 'DESPAWNED';
+        this.respawnTimer = (this.balance && this.balance.POLICE_RESPAWN_DELAY) || 18.0;
+        return;
+      }
+      // Panic run: flee away from player or center at high speed
+      const pTile = player ? player.getTile() : { x: 10, y: 10 };
+      let dx = this.x - pTile.x;
+      let dy = this.y - pTile.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const speed = ((this.balance && this.balance.POLICE_SPEED_CHASE) || 4.0) * 1.3;
+
+      const step = speed * dt;
+      const nextX = this.x + (dx / len) * step;
+      const nextY = this.y + (dy / len) * step;
+      if (city.isValid(Math.round(nextX), Math.round(nextY)) && city.isWalkable(Math.round(nextX), Math.round(nextY))) {
+        this.x = nextX;
+        this.y = nextY;
+      } else {
+        const edgeX = (this.x < city.cols / 2) ? -1 : 1;
+        const edgeY = (this.y < city.rows / 2) ? -1 : 1;
+        this.x += edgeX * step * 0.7;
+        this.y += edgeY * step * 0.7;
+      }
+      return;
+    }
+
+    // If stunned, cannot move or act
     if (this.stunTimer > 0) {
       this.stunTimer -= dt;
       return;
     }
 
     const myTile = { x: Math.round(this.x), y: Math.round(this.y) };
-    const playerTile = player.getTile();
+
+    // Fire Fear: If standing on active fire, panic and retreat!
+    if (city.isValid(myTile.x, myTile.y) && city.fireTimer[myTile.y][myTile.x] > 0) {
+      this.banish(city, audio);
+      if (onBanish) onBanish(this);
+      return;
+    }
+
+    const playerTile = player ? player.getTile() : { x: 0, y: 0 };
 
     // 1. Detection Check
-    const seesPlayer = this.hasLineOfSight(playerTile, city);
+    const seesPlayer = player ? this.hasLineOfSight(playerTile, city) : false;
 
     if (seesPlayer) {
-      if (this.state !== 'CHASE') {
+      if (this.state !== 'CHASE' && audio) {
         audio.sfxPoliceAlert();
       }
       this.state = 'CHASE';
-      this.alertTimer = 4.0; // Stay alert for 4 seconds after sighting
+      const alertDur = (this.balance && this.balance.POLICE_ALERT_DURATION) || 2.5;
+      this.alertTimer = alertDur;
     } else if (this.state === 'CHASE') {
       this.alertTimer -= dt;
       if (this.alertTimer <= 0) {
@@ -267,18 +400,23 @@ export class Police {
     const bal = this.balance || BALANCE;
     const speed = (this.state === 'CHASE') ? bal.POLICE_SPEED_CHASE : bal.POLICE_SPEED_PATROL;
 
-    // 2. Pathfinding & Movement
+    // 2. Pathfinding & Movement (strictly avoid fire!)
     this.pathUpdateTimer -= dt;
     if (this.pathUpdateTimer <= 0) {
       this.pathUpdateTimer = (this.state === 'CHASE') ? 0.35 : 1.2;
 
-      if (this.state === 'CHASE') {
-        this.path = city.findPath(myTile.x, myTile.y, playerTile.x, playerTile.y, true) || [];
+      if (this.state === 'CHASE' && player) {
+        // Find path avoiding fire
+        this.path = city.findPath(myTile.x, myTile.y, playerTile.x, playerTile.y, true, true) || [];
       } else {
-        // Random patrol wandering
+        // Random patrol wandering, strictly avoiding fire tiles
         if (!this.path || this.path.length === 0) {
           const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-          const validMoves = dirs.filter(([dc, dr]) => city.isWalkable(myTile.x + dc, myTile.y + dr));
+          const validMoves = dirs.filter(([dc, dr]) => {
+            const tc = myTile.x + dc;
+            const tr = myTile.y + dr;
+            return city.isWalkable(tc, tr) && city.fireTimer[tr][tc] <= 0;
+          });
           if (validMoves.length > 0) {
             const [dc, dr] = validMoves[Math.floor(Math.random() * validMoves.length)];
             this.path = [{ x: myTile.x + dc, y: myTile.y + dr }];
@@ -316,7 +454,8 @@ export class Police {
   }
 
   checkPlayerCollision(player) {
-    if (this.stunTimer > 0) return false; // Stunned police cannot arrest
+    if (this.stunTimer > 0) return false;
+    if (this.state === 'RETREAT' || this.state === 'DESPAWNED') return false;
     const dx = this.x - player.x;
     const dy = this.y - player.y;
     return Math.sqrt(dx * dx + dy * dy) < 0.65;

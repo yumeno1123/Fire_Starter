@@ -215,6 +215,20 @@ class SoundSystem {
     this.playTone(1320, 'sine', 0.05, 0.10, 1760);
   }
 
+  sfxBreakAway() {
+    this.ensureContext();
+    this.playTone(220, 'sawtooth', 0.12, 0.4, 80);
+    this.playNoise(0.18, 0.35, 800);
+    setTimeout(() => this.playTone(440, 'triangle', 0.1, 0.25, 220), 50);
+  }
+
+  sfxPolicePanic() {
+    this.ensureContext();
+    this.playTone(1200, 'square', 0.08, 0.3, 1800);
+    setTimeout(() => this.playTone(1800, 'square', 0.08, 0.3, 2400), 70);
+    setTimeout(() => this.playTone(2400, 'square', 0.15, 0.35, 1200), 140);
+  }
+
   sfxGameOver(reasonId) {
     this.ensureContext();
     this.stopBGM();

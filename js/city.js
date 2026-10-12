@@ -333,7 +333,7 @@ export class City {
   }
 
   // Breadth-First Search Pathfinding on walkable tiles
-  findPath(startC, startR, targetC, targetR, allowNearTarget = true) {
+  findPath(startC, startR, targetC, targetR, allowNearTarget = true, avoidFire = false) {
     if (startC === targetC && startR === targetR) return [];
 
     const queue = [[startC, startR]];
@@ -359,8 +359,9 @@ export class City {
 
         if (this.isValid(nextC, nextR) && !visited[nextR][nextC]) {
           const isTarget = (nextC === targetC && nextR === targetR);
-          // Walkable tile, or target tile if allowNearTarget
-          if (this.isWalkable(nextC, nextR) || (allowNearTarget && isTarget)) {
+          const isFire = avoidFire && (this.fireTimer[nextR][nextC] > 0);
+          // Walkable tile (not on fire if avoidFire), or target tile if allowNearTarget
+          if (!isFire && (this.isWalkable(nextC, nextR) || (allowNearTarget && isTarget))) {
             visited[nextR][nextC] = true;
             parent.set(`${nextC},${nextR}`, [currC, currR]);
             queue.push([nextC, nextR]);

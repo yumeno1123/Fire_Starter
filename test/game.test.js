@@ -61,7 +61,18 @@ test('Game: state machine flow and game over conditions', () => {
   game.update(0.1, { aJustPressed: true });
   assert.equal(game.state, GAME_STATES.PLAYING);
 
-  // Test Game Over: ARRESTED
+  // Test Break Away: Collision with stamina >= cost does NOT trigger Game Over
+  game.player.stamina = 100;
+  game.policeUnits[0].x = game.player.x;
+  game.policeUnits[0].y = game.player.y;
+  game.update(0.1, {});
+  assert.equal(game.state, GAME_STATES.PLAYING, 'Game must stay PLAYING on breakaway');
+  assert.ok(game.player.stamina < 100, 'Stamina must be consumed for breakaway');
+  assert.ok(game.policeUnits[0].stunTimer > 0, 'Police must be stunned after breakaway');
+
+  // Test Game Over: ARRESTED (requires player out of stamina)
+  game.policeUnits[0].stunTimer = 0;
+  game.player.stamina = 0;
   game.policeUnits[0].x = game.player.x;
   game.policeUnits[0].y = game.player.y;
   game.update(0.1, {});
@@ -119,7 +130,8 @@ test('Game: difficulty selection, balance propagation, and high scores', () => {
   assert.equal(game.policeUnits[0].balance.id, 'EASY');
   assert.equal(game.firefighters[0].balance.id, 'EASY');
 
-  // EASY player receives boosted initial ammo (1.5x)
+  // EASY player receives boosted initial ammo (1.5x) and 1 police officer
+  assert.equal(game.policeUnits.length, 1, 'EASY difficulty must spawn 1 police officer');
   assert.ok(game.player.ammo.MATCH > 15, 'EASY difficulty must grant increased initial matches');
 
   // Game over on EASY records EASY-specific high score
@@ -142,6 +154,7 @@ test('Game: difficulty selection, balance propagation, and high scores', () => {
   game.update(0.1, { aJustPressed: true });
   assert.equal(game.city.balance.id, 'HARD');
   assert.equal(game.player.balance.id, 'HARD');
+  assert.equal(game.policeUnits.length, 2, 'HARD difficulty must spawn 2 police officers');
   assert.ok(game.player.ammo.MATCH < 15, 'HARD difficulty has scarcer initial ammo');
 });
 

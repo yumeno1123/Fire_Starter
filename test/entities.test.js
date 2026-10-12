@@ -14,6 +14,10 @@ const mockAudio = {
   sfxExplosion: () => {},
   sfxWater: () => {},
   sfxPoliceAlert: () => {},
+  sfxPoliceWhistle: () => {},
+  sfxPolicePanic: () => {},
+  sfxBreakAway: () => {},
+  sfxStun: () => {},
   sfxFirefighterSiren: () => {},
   sfxItemSwitch: () => {},
   sfxItemCollect: () => {},
@@ -228,4 +232,77 @@ test('Stealth: fire/smoke blocks police line of sight', () => {
   // Active fire/smoke should obscure line of sight
   assert.equal(police.hasLineOfSight(player.getTile(), city), false, 'Fire and smoke must block line of sight');
 });
+
+test('Police Break Away: knockback, stamina drain, and stun', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+
+  const police = new Police(5, 5);
+  const player = new Player(5, 5);
+  player.stamina = 100;
+
+  police.shoveAway(player, city);
+
+  assert.ok(police.stunTimer > 0, 'Police must be stunned after breakaway shove');
+  assert.equal(police.state, 'PATROL');
+  assert.equal(police.checkPlayerCollision(player), false, 'Stunned police cannot arrest player');
+});
+
+test('Police Fire Fear: pathfinding avoids flames and standing in fire triggers banish', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+
+  // Without fire, shortest path from (0, 0) to (2, 0) goes directly through (1, 0)
+  const pathNormal = city.findPath(0, 0, 2, 0, true, false);
+  assert.deepEqual(pathNormal, [{ x: 1, y: 0 }, { x: 2, y: 0 }]);
+
+  // Place fire at (1, 0)
+  city.fireTimer[0][1] = 5.0;
+
+  // Path with avoidFire=true must avoid (1, 0) and route around via row 1
+  const pathSafe = city.findPath(0, 0, 2, 0, true, true);
+  assert.notEqual(pathSafe[0].x, 1, 'Safe path must not step on burning tile (1,0)');
+
+  // Standing on fire triggers banish / retreat
+  const police = new Police(4, 4);
+  city.fireTimer[4][4] = 3.0;
+
+  let banished = false;
+  police.update(0.1, null, city, mockAudio, () => {
+    banished = true;
+  });
+
+  assert.equal(banished, true, 'Standing in active fire must trigger banish callback');
+  assert.equal(police.state, 'RETREAT', 'Police should enter RETREAT state');
+});
+
+test('Police Lifecycle: retreat -> despawn -> perimeter respawn', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+
+  const police = new Police(5, 5);
+  police.banish(city, mockAudio);
+  assert.equal(police.state, 'RETREAT');
+
+  // Fast forward past retreat duration (1.5s)
+  police.update(1.6, null, city, mockAudio);
+  assert.equal(police.state, 'DESPAWNED', 'Police should despawn after retreat timer expires');
+  assert.ok(police.respawnTimer > 0, 'Respawn timer should be running');
+
+  // Fast forward past respawn timer
+  const respawnTime = police.respawnTimer;
+  const player = new Player(5, 5);
+  police.update(respawnTime + 0.1, player, city, mockAudio);
+  assert.equal(police.state, 'PATROL', 'Police should respawn in PATROL state');
+  // Check that respawn position is near map perimeter (row or col <= 2 or >= 7)
+  const isPerimeter = (police.y <= 2 || police.y >= 7 || police.x <= 2 || police.x >= 7);
+  assert.ok(isPerimeter, 'Police must respawn at outer map perimeter');
+});
+
 
