@@ -128,24 +128,97 @@ export const DEATH_REASONS = {
   }
 };
 
-export const BALANCE = {
-  INITIAL_BUILDING_RATIO: 0.40, // 40% starting buildings
-  GROWTH_INTERVAL: 2.0,         // Slightly more room to breathe initially
-  GROWTH_ACCELERATION: 0.988,   // Interval shrinks gently over time
-  MIN_GROWTH_INTERVAL: 0.7,
-  BURNING_DAMAGE_RATE: 0.55,    // Fast, crisp destruction rhythm (~1.8s to ash)
-  FIRE_TICK_INTERVAL: 0.30,     // Fast spreading tick
-  WATER_DURATION: 4.5,          // Wet tile cooldown
-  PLAYER_SPEED: 4.6,            // Tiles per second
-  PLAYER_DASH_SPEED: 7.5,       // Speedy sprint
-  POLICE_SPEED_PATROL: 2.2,
-  POLICE_SPEED_CHASE: 4.2,      // Manageable chase speed
-  POLICE_LOS_RANGE: 4.5,        // Detection radius
-  FIREFIGHTER_SPEED: 3.0,
-  DASH_STAMINA_DRAIN: 18,       // Stamina lasts 2x longer
-  DASH_STAMINA_RECOVERY: 35,    // Recovers much faster
-  ITEM_DROP_CHANCE: 0.42,       // 42% item drops from burned buildings
-  STUN_SCORE_BONUS: 250,        // Bonus tribute score for stunning enemies
-  DANGER_LOW_BUILDING: 0.05,    // 5% -> risk of full burn
-  DANGER_HIGH_BUILDING: 0.90    // 90% -> risk of crushing
+export const DIFFICULTY_SETTINGS = {
+  EASY: {
+    id: 'EASY',
+    name: 'EASY',
+    label: 'EASY (かんたん)',
+    desc: '延焼が穏やか・全焼防止セーフティ',
+    INITIAL_BUILDING_RATIO: 0.42,
+    GROWTH_INTERVAL: 2.5,
+    GROWTH_ACCELERATION: 0.992,
+    MIN_GROWTH_INTERVAL: 0.9,
+    BURNING_DAMAGE_RATE: 0.28,    // ~3.5s to burn down (buffer against rapid burnout)
+    FIRE_TICK_INTERVAL: 0.42,     // Fire spreads slower
+    FIRE_SPREAD_MODIFIER: 0.70,   // Spread chance 70% of base
+    FIRE_DECAY_RATE: 0.80,        // Decays fast so fires don't engulf whole map
+    WATER_DURATION: 4.0,
+    EMERGENCY_REGROWTH_RATIO: 0.12, // Demonic city emergency sprout under 12%
+    PLAYER_SPEED: 4.8,
+    PLAYER_DASH_SPEED: 7.8,
+    POLICE_SPEED_PATROL: 1.9,
+    POLICE_SPEED_CHASE: 3.5,
+    POLICE_LOS_RANGE: 3.5,
+    FIREFIGHTER_SPEED: 3.2,
+    DASH_STAMINA_DRAIN: 14,
+    DASH_STAMINA_RECOVERY: 42,
+    ITEM_DROP_CHANCE: 0.50,
+    AMMO_MULTIPLIER: 1.5,
+    STUN_SCORE_BONUS: 300,
+    DANGER_LOW_BUILDING: 0.05,
+    DANGER_HIGH_BUILDING: 0.92
+  },
+  NORMAL: {
+    id: 'NORMAL',
+    name: 'NORMAL',
+    label: 'NORMAL (ふつう)',
+    desc: '標準バランス: 延焼と増殖の綱渡り',
+    INITIAL_BUILDING_RATIO: 0.40,
+    GROWTH_INTERVAL: 2.0,
+    GROWTH_ACCELERATION: 0.988,
+    MIN_GROWTH_INTERVAL: 0.7,
+    BURNING_DAMAGE_RATE: 0.38,    // ~2.6s to ash (improved from 1.8s)
+    FIRE_TICK_INTERVAL: 0.35,     // Slower spread tick
+    FIRE_SPREAD_MODIFIER: 0.85,   // Prevents runaway chain reactions
+    FIRE_DECAY_RATE: 0.85,
+    WATER_DURATION: 4.5,
+    EMERGENCY_REGROWTH_RATIO: 0.07, // Demonic city emergency sprout under 7%
+    PLAYER_SPEED: 4.6,
+    PLAYER_DASH_SPEED: 7.5,
+    POLICE_SPEED_PATROL: 2.2,
+    POLICE_SPEED_CHASE: 4.0,
+    POLICE_LOS_RANGE: 4.2,
+    FIREFIGHTER_SPEED: 3.0,
+    DASH_STAMINA_DRAIN: 18,
+    DASH_STAMINA_RECOVERY: 35,
+    ITEM_DROP_CHANCE: 0.42,
+    AMMO_MULTIPLIER: 1.0,
+    STUN_SCORE_BONUS: 250,
+    DANGER_LOW_BUILDING: 0.05,
+    DANGER_HIGH_BUILDING: 0.90
+  },
+  HARD: {
+    id: 'HARD',
+    name: 'HARD',
+    label: 'HARD (むずかしい)',
+    desc: '過酷な自己増殖と俊敏な警察の追跡',
+    INITIAL_BUILDING_RATIO: 0.38,
+    GROWTH_INTERVAL: 1.6,
+    GROWTH_ACCELERATION: 0.982,
+    MIN_GROWTH_INTERVAL: 0.55,
+    BURNING_DAMAGE_RATE: 0.48,
+    FIRE_TICK_INTERVAL: 0.30,
+    FIRE_SPREAD_MODIFIER: 1.0,
+    FIRE_DECAY_RATE: 0.90,
+    WATER_DURATION: 5.0,
+    EMERGENCY_REGROWTH_RATIO: 0.04,
+    PLAYER_SPEED: 4.5,
+    PLAYER_DASH_SPEED: 7.2,
+    POLICE_SPEED_PATROL: 2.4,
+    POLICE_SPEED_CHASE: 4.4,
+    POLICE_LOS_RANGE: 4.8,
+    FIREFIGHTER_SPEED: 2.8,
+    DASH_STAMINA_DRAIN: 22,
+    DASH_STAMINA_RECOVERY: 28,
+    ITEM_DROP_CHANCE: 0.35,
+    AMMO_MULTIPLIER: 0.8,
+    STUN_SCORE_BONUS: 200,
+    DANGER_LOW_BUILDING: 0.05,
+    DANGER_HIGH_BUILDING: 0.88
+  }
 };
+
+export const DIFFICULTY_KEYS = ['EASY', 'NORMAL', 'HARD'];
+
+export const BALANCE = DIFFICULTY_SETTINGS.NORMAL;
+

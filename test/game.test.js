@@ -98,3 +98,49 @@ test('Game: tribute score combo and high score recording', () => {
   assert.equal(game.highScore, currentScore);
   assert.equal(localStorage.getItem('firestarter_highscore'), String(currentScore));
 });
+
+test('Game: difficulty selection, balance propagation, and high scores', () => {
+  const canvas = createMockCanvas();
+  const game = new Game(canvas);
+
+  // Default difficulty is NORMAL
+  assert.equal(game.difficulty, 'NORMAL');
+
+  // Cycle up/left -> EASY
+  game.update(0.1, { upJustPressed: true });
+  assert.equal(game.difficulty, 'EASY');
+  assert.equal(game.balance.id, 'EASY');
+
+  // Start game on EASY
+  game.update(0.1, { aJustPressed: true });
+  assert.equal(game.state, GAME_STATES.PLAYING);
+  assert.equal(game.city.balance.id, 'EASY');
+  assert.equal(game.player.balance.id, 'EASY');
+  assert.equal(game.policeUnits[0].balance.id, 'EASY');
+  assert.equal(game.firefighters[0].balance.id, 'EASY');
+
+  // EASY player receives boosted initial ammo (1.5x)
+  assert.ok(game.player.ammo.MATCH > 15, 'EASY difficulty must grant increased initial matches');
+
+  // Game over on EASY records EASY-specific high score
+  game.addTributeScore(500);
+  game.gameOver(DEATH_REASONS.FULL_BURN);
+  assert.equal(localStorage.getItem('firestarter_highscore_easy'), '500');
+
+  // Return to title
+  game.update(0.1, { bJustPressed: true });
+  assert.equal(game.state, GAME_STATES.TITLE);
+
+  // Cycle to HARD (2 steps forward from EASY: EASY -> NORMAL -> HARD)
+  game.update(0.1, { downJustPressed: true });
+  assert.equal(game.difficulty, 'NORMAL');
+  game.update(0.1, { downJustPressed: true });
+  assert.equal(game.difficulty, 'HARD');
+  assert.equal(game.balance.id, 'HARD');
+
+  // Start game on HARD
+  game.update(0.1, { aJustPressed: true });
+  assert.equal(game.city.balance.id, 'HARD');
+  assert.equal(game.player.balance.id, 'HARD');
+  assert.ok(game.player.ammo.MATCH < 15, 'HARD difficulty has scarcer initial ammo');
+});

@@ -231,6 +231,7 @@ class SoundSystem {
 
   startBGM() {
     if (this.bgmPlaying) return;
+    if (typeof window === 'undefined') return;
     this.ensureContext();
     this.bgmPlaying = true;
     this.bgmStep = 0;

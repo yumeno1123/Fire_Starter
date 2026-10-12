@@ -3,7 +3,7 @@
 import { TILES, ITEMS, ITEM_LIST, BALANCE } from './constants.js';
 
 export class Player {
-  constructor(x = 10, y = 10) {
+  constructor(x = 10, y = 10, balance = BALANCE) {
     this.x = x;
     this.y = y;
     this.targetX = x;
@@ -13,18 +13,20 @@ export class Player {
     this.dashing = false;
     this.walkFrame = 0;
     this.walkAnimTimer = 0;
+    this.balance = balance || BALANCE;
 
     // Inventory
     this.selectedItemIdx = 0;
+    const mult = (this.balance && this.balance.AMMO_MULTIPLIER) ? this.balance.AMMO_MULTIPLIER : 1.0;
     this.ammo = {
-      MATCH: ITEMS.MATCH.initialAmmo,
-      LIGHTER: ITEMS.LIGHTER.initialAmmo,
-      MOLOTOV: ITEMS.MOLOTOV.initialAmmo,
-      TIME_BOMB: ITEMS.TIME_BOMB.initialAmmo
+      MATCH: Math.round(ITEMS.MATCH.initialAmmo * mult),
+      LIGHTER: Math.round(ITEMS.LIGHTER.initialAmmo * mult),
+      MOLOTOV: Math.round(ITEMS.MOLOTOV.initialAmmo * mult),
+      TIME_BOMB: Math.round(ITEMS.TIME_BOMB.initialAmmo * mult)
     };
   }
 
-  reset(x = 10, y = 10) {
+  reset(x = 10, y = 10, balance = null) {
     this.x = x;
     this.y = y;
     this.targetX = x;
@@ -35,11 +37,13 @@ export class Player {
     this.walkFrame = 0;
     this.walkAnimTimer = 0;
     this.selectedItemIdx = 0;
+    if (balance) this.balance = balance;
+    const mult = (this.balance && this.balance.AMMO_MULTIPLIER) ? this.balance.AMMO_MULTIPLIER : 1.0;
     this.ammo = {
-      MATCH: ITEMS.MATCH.initialAmmo,
-      LIGHTER: ITEMS.LIGHTER.initialAmmo,
-      MOLOTOV: ITEMS.MOLOTOV.initialAmmo,
-      TIME_BOMB: ITEMS.TIME_BOMB.initialAmmo
+      MATCH: Math.round(ITEMS.MATCH.initialAmmo * mult),
+      LIGHTER: Math.round(ITEMS.LIGHTER.initialAmmo * mult),
+      MOLOTOV: Math.round(ITEMS.MOLOTOV.initialAmmo * mult),
+      TIME_BOMB: Math.round(ITEMS.TIME_BOMB.initialAmmo * mult)
     };
   }
 
@@ -76,16 +80,17 @@ export class Player {
 
   update(dt, input, city) {
     // 1. Dash & Stamina Management
+    const bal = this.balance || BALANCE;
     if (input.bHeld && (input.up || input.down || input.left || input.right) && this.stamina > 10) {
       this.dashing = true;
-      this.stamina = Math.max(0, this.stamina - BALANCE.DASH_STAMINA_DRAIN * dt);
+      this.stamina = Math.max(0, this.stamina - bal.DASH_STAMINA_DRAIN * dt);
       if (this.stamina <= 0) this.dashing = false;
     } else {
       this.dashing = false;
-      this.stamina = Math.min(100, this.stamina + BALANCE.DASH_STAMINA_RECOVERY * dt);
+      this.stamina = Math.min(100, this.stamina + bal.DASH_STAMINA_RECOVERY * dt);
     }
 
-    const speed = this.dashing ? BALANCE.PLAYER_DASH_SPEED : BALANCE.PLAYER_SPEED;
+    const speed = this.dashing ? bal.PLAYER_DASH_SPEED : bal.PLAYER_SPEED;
 
     // 2. Continuous Directional Movement with Collision
     let dx = 0;
@@ -182,9 +187,10 @@ export class Player {
 }
 
 export class Police {
-  constructor(x, y) {
+  constructor(x, y, balance = BALANCE) {
     this.x = x;
     this.y = y;
+    this.balance = balance || BALANCE;
     this.dir = 'DOWN';
     this.state = 'PATROL'; // 'PATROL' or 'CHASE'
     this.alertTimer = 0;
@@ -203,7 +209,7 @@ export class Police {
   }
 
   hasLineOfSight(playerTile, city) {
-    const losRange = BALANCE.POLICE_LOS_RANGE || 4.5;
+    const losRange = (this.balance && this.balance.POLICE_LOS_RANGE) || 4.5;
     const myTile = { x: Math.round(this.x), y: Math.round(this.y) };
     const dx = playerTile.x - myTile.x;
     const dy = playerTile.y - myTile.y;
@@ -258,7 +264,8 @@ export class Police {
       }
     }
 
-    const speed = (this.state === 'CHASE') ? BALANCE.POLICE_SPEED_CHASE : BALANCE.POLICE_SPEED_PATROL;
+    const bal = this.balance || BALANCE;
+    const speed = (this.state === 'CHASE') ? bal.POLICE_SPEED_CHASE : bal.POLICE_SPEED_PATROL;
 
     // 2. Pathfinding & Movement
     this.pathUpdateTimer -= dt;
@@ -317,9 +324,10 @@ export class Police {
 }
 
 export class Firefighter {
-  constructor(x, y) {
+  constructor(x, y, balance = BALANCE) {
     this.x = x;
     this.y = y;
+    this.balance = balance || BALANCE;
     this.dir = 'DOWN';
     this.state = 'PATROL'; // 'PATROL', 'MOVING_TO_FIRE', 'SPRAYING'
     this.targetFire = null;
@@ -419,7 +427,8 @@ export class Firefighter {
         this.y = nextNode.y;
         this.path.shift();
       } else {
-        const step = Math.min(dist, BALANCE.FIREFIGHTER_SPEED * dt);
+        const ffSpeed = (this.balance && this.balance.FIREFIGHTER_SPEED) || BALANCE.FIREFIGHTER_SPEED;
+        const step = Math.min(dist, ffSpeed * dt);
         this.x += (diffX / dist) * step;
         this.y += (diffY / dist) * step;
 

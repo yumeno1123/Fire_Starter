@@ -7,6 +7,10 @@ export class InputManager {
       down: false,
       left: false,
       right: false,
+      upJustPressed: false,
+      downJustPressed: false,
+      leftJustPressed: false,
+      rightJustPressed: false,
       a: false,
       b: false,
       bHeld: false,
@@ -38,18 +42,22 @@ export class InputManager {
       switch (e.code) {
         case 'ArrowUp':
         case 'KeyW':
+          if (!this.state.up) this.state.upJustPressed = true;
           this.state.up = true;
           break;
         case 'ArrowDown':
         case 'KeyS':
+          if (!this.state.down) this.state.downJustPressed = true;
           this.state.down = true;
           break;
         case 'ArrowLeft':
         case 'KeyA':
+          if (!this.state.left) this.state.leftJustPressed = true;
           this.state.left = true;
           break;
         case 'ArrowRight':
         case 'KeyD':
+          if (!this.state.right) this.state.rightJustPressed = true;
           this.state.right = true;
           break;
         case 'KeyZ':
@@ -141,11 +149,21 @@ export class InputManager {
 
       const angle = Math.atan2(dy, dx) * (180 / Math.PI); // -180 to 180
 
+      const prevRight = this.state.right;
+      const prevDown = this.state.down;
+      const prevLeft = this.state.left;
+      const prevUp = this.state.up;
+
       // 8-directional or 4-directional mapping
       this.state.right = (angle >= -67.5 && angle <= 67.5);
       this.state.down = (angle >= 22.5 && angle <= 157.5);
       this.state.left = (angle >= 112.5 || angle <= -112.5);
       this.state.up = (angle >= -157.5 && angle <= -22.5);
+
+      if (this.state.right && !prevRight) this.state.rightJustPressed = true;
+      if (this.state.down && !prevDown) this.state.downJustPressed = true;
+      if (this.state.left && !prevLeft) this.state.leftJustPressed = true;
+      if (this.state.up && !prevUp) this.state.upJustPressed = true;
     };
 
     const resetDpad = () => {
@@ -261,5 +279,9 @@ export class InputManager {
     this.state.startJustPressed = false;
     this.state.selectJustPressed = false;
     this.state.muteJustPressed = false;
+    this.state.upJustPressed = false;
+    this.state.downJustPressed = false;
+    this.state.leftJustPressed = false;
+    this.state.rightJustPressed = false;
   }
 }

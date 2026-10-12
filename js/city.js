@@ -3,9 +3,10 @@
 import { GRID_COLS, GRID_ROWS, TILES, BALANCE } from './constants.js';
 
 export class City {
-  constructor(cols = GRID_COLS, rows = GRID_ROWS) {
+  constructor(cols = GRID_COLS, rows = GRID_ROWS, balance = BALANCE) {
     this.cols = cols;
     this.rows = rows;
+    this.balance = balance || BALANCE;
     this.grid = new Array(rows).fill(0).map(() => new Array(cols).fill(TILES.ROAD));
     this.health = new Array(rows).fill(1).map(() => new Array(cols).fill(1.0));
     this.fireTimer = new Array(rows).fill(0).map(() => new Array(cols).fill(0));
@@ -14,15 +15,16 @@ export class City {
     this.growingTimer = new Array(rows).fill(0).map(() => new Array(cols).fill(0)); // Visual warning before solidifying
     this.items = []; // Dropped items on map [{x, y, type}]
 
-    this.growthInterval = BALANCE.GROWTH_INTERVAL;
+    this.growthInterval = this.balance.GROWTH_INTERVAL;
     this.timeSinceGrowth = 0;
     this.fireTickTimer = 0;
     this.totalBuildingsBurned = 0;
     this.totalFiresStarted = 0;
   }
 
-  init(initialRatio = BALANCE.INITIAL_BUILDING_RATIO, playerSpawn = { x: 10, y: 10 }) {
-    this.growthInterval = BALANCE.GROWTH_INTERVAL;
+  init(initialRatio = this.balance.INITIAL_BUILDING_RATIO, playerSpawn = { x: 10, y: 10 }, balance = null) {
+    if (balance) this.balance = balance;
+    this.growthInterval = this.balance.GROWTH_INTERVAL;
     this.timeSinceGrowth = 0;
     this.fireTickTimer = 0;
     this.totalBuildingsBurned = 0;
@@ -88,7 +90,8 @@ export class City {
 
     // Direct hit on building or road
     this.fireTimer[r][c] = itemConfig.burnDuration;
-    this.fireSpreadChance[r][c] = itemConfig.spreadChance;
+    const spreadMod = (this.balance && this.balance.FIRE_SPREAD_MODIFIER !== undefined) ? this.balance.FIRE_SPREAD_MODIFIER : 1.0;
+    this.fireSpreadChance[r][c] = itemConfig.spreadChance * spreadMod;
     this.totalFiresStarted++;
     return true;
   }
@@ -98,7 +101,7 @@ export class City {
     if (this.fireTimer[r][c] > 0) {
       this.fireTimer[r][c] = 0;
       this.fireSpreadChance[r][c] = 0;
-      this.wetTimer[r][c] = BALANCE.WATER_DURATION;
+      this.wetTimer[r][c] = this.balance.WATER_DURATION;
       this.grid[r][c] = TILES.WET;
       return true;
     }
@@ -162,12 +165,34 @@ export class City {
       }
     }
 
+    // Emergency regrowth if city is on the verge of total full-burn extinction
+    const currentBuildingCount = this.getBuildingCount();
+    const ratio = currentBuildingCount / (this.cols * this.rows);
+    const emergencyThreshold = this.balance.EMERGENCY_REGROWTH_RATIO || 0.07;
+    if (ratio < emergencyThreshold && currentBuildingCount > 0) {
+      let sprouted = 0;
+      for (let r = 0; r < this.rows && sprouted < 2; r++) {
+        for (let c = 0; c < this.cols && sprouted < 2; c++) {
+          if (nextGrid[r][c] === TILES.ROAD || nextGrid[r][c] === TILES.ASH) {
+            if (this.fireTimer[r][c] === 0 && this.wetTimer[r][c] === 0) {
+              const dist = Math.abs(c - playerPos.x) + Math.abs(r - playerPos.y);
+              if (dist >= 3 && Math.random() < 0.25) {
+                nextGrid[r][c] = TILES.BUILDING;
+                this.health[r][c] = 1.0;
+                sprouted++;
+              }
+            }
+          }
+        }
+      }
+    }
+
     this.grid = nextGrid;
 
     // Speed up growth gradually
     this.growthInterval = Math.max(
-      BALANCE.MIN_GROWTH_INTERVAL,
-      this.growthInterval * BALANCE.GROWTH_ACCELERATION
+      this.balance.MIN_GROWTH_INTERVAL,
+      this.growthInterval * this.balance.GROWTH_ACCELERATION
     );
   }
 
@@ -189,7 +214,7 @@ export class City {
 
     // 2. Fire Simulation & Damage
     this.fireTickTimer += dt;
-    const isSpreadTick = this.fireTickTimer >= (BALANCE.FIRE_TICK_INTERVAL || 0.30);
+    const isSpreadTick = this.fireTickTimer >= (this.balance.FIRE_TICK_INTERVAL || 0.35);
     if (isSpreadTick) this.fireTickTimer = 0;
 
     for (let r = 0; r < this.rows; r++) {
@@ -199,7 +224,7 @@ export class City {
 
           // Damage building if standing on one
           if (this.grid[r][c] === TILES.BUILDING) {
-            this.health[r][c] -= BALANCE.BURNING_DAMAGE_RATE * dt;
+            this.health[r][c] -= this.balance.BURNING_DAMAGE_RATE * dt;
             if (this.health[r][c] <= 0) {
               this.grid[r][c] = TILES.ASH;
               this.health[r][c] = 0;
@@ -211,7 +236,7 @@ export class City {
               }
 
               // Roll for item drop
-              if (Math.random() < BALANCE.ITEM_DROP_CHANCE) {
+              if (Math.random() < this.balance.ITEM_DROP_CHANCE) {
                 this.dropRandomItem(c, r);
               }
             }
@@ -221,12 +246,13 @@ export class City {
           if (isSpreadTick && this.fireTimer[r][c] > 0.5) {
             const spreadChance = this.fireSpreadChance[r][c];
             const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+            const decayRate = this.balance.FIRE_DECAY_RATE || 0.85;
             for (const [dc, dr] of dirs) {
               const nc = c + dc;
               const nr = r + dr;
               if (this.isFlammable(nc, nr) && Math.random() < spreadChance) {
-                this.fireTimer[nr][nc] = Math.max(3.0, this.fireTimer[r][c] * 0.9);
-                this.fireSpreadChance[nr][nc] = spreadChance * 0.95;
+                this.fireTimer[nr][nc] = Math.max(2.0, this.fireTimer[r][c] * 0.85);
+                this.fireSpreadChance[nr][nc] = spreadChance * decayRate;
               }
             }
           }

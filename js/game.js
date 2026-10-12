@@ -8,6 +8,8 @@ import {
   PALETTES,
   GAME_STATES,
   DEATH_REASONS,
+  DIFFICULTY_SETTINGS,
+  DIFFICULTY_KEYS,
   BALANCE
 } from './constants.js';
 import { SpriteRenderer } from './sprites.js';
@@ -26,6 +28,14 @@ export class Game {
     this.palette = PALETTES[this.paletteKeys[this.paletteIdx]];
     this.renderer = new SpriteRenderer(this.palette);
 
+    // Difficulty Settings
+    this.difficultyKeys = DIFFICULTY_KEYS;
+    const savedDiff = (typeof localStorage !== 'undefined') ? localStorage.getItem('firestarter_difficulty') : null;
+    const initialDiffIdx = this.difficultyKeys.indexOf(savedDiff);
+    this.difficultyIdx = (initialDiffIdx >= 0) ? initialDiffIdx : 1; // Default: NORMAL (idx 1)
+    this.difficulty = this.difficultyKeys[this.difficultyIdx];
+    this.balance = DIFFICULTY_SETTINGS[this.difficulty];
+
     // Canvas internal logical resolution
     this.width = GRID_COLS * TILE_SIZE;  // 320px
     this.height = GRID_ROWS * TILE_SIZE; // 320px
@@ -33,8 +43,8 @@ export class Game {
     this.canvas.height = this.height;
 
     // Simulation subsystems
-    this.city = new City(GRID_COLS, GRID_ROWS);
-    this.player = new Player(10, 10);
+    this.city = new City(GRID_COLS, GRID_ROWS, this.balance);
+    this.player = new Player(10, 10, this.balance);
     this.policeUnits = [];
     this.firefighters = [];
     this.projectiles = [];
@@ -43,7 +53,7 @@ export class Game {
     // State machine
     this.state = GAME_STATES.TITLE;
     this.deathReason = null;
-    this.highScore = (typeof localStorage !== 'undefined') ? parseInt(localStorage.getItem('firestarter_highscore') || '0', 10) : 0;
+    this.highScore = this.getHighScore(this.difficulty);
     this.tributeScore = 0;
     this.survivalTime = 0;
     this.comboCount = 0;
@@ -65,6 +75,43 @@ export class Game {
     this.shakeIntensity = intensity;
   }
 
+  getHighScore(diffKey) {
+    if (typeof localStorage === 'undefined') return 0;
+    const key = `firestarter_highscore_${diffKey.toLowerCase()}`;
+    const diffScore = localStorage.getItem(key);
+    if (diffScore !== null) {
+      return parseInt(diffScore, 10) || 0;
+    }
+    if (diffKey === 'NORMAL') {
+      return parseInt(localStorage.getItem('firestarter_highscore') || '0', 10) || 0;
+    }
+    return 0;
+  }
+
+  setDifficulty(diffKey) {
+    const idx = this.difficultyKeys.indexOf(diffKey);
+    if (idx >= 0) {
+      this.difficultyIdx = idx;
+      this.difficulty = this.difficultyKeys[idx];
+      this.balance = DIFFICULTY_SETTINGS[this.difficulty];
+      this.highScore = this.getHighScore(this.difficulty);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('firestarter_difficulty', this.difficulty);
+      }
+    }
+  }
+
+  cycleDifficulty(dir = 1) {
+    this.difficultyIdx = (this.difficultyIdx + dir + this.difficultyKeys.length) % this.difficultyKeys.length;
+    this.difficulty = this.difficultyKeys[this.difficultyIdx];
+    this.balance = DIFFICULTY_SETTINGS[this.difficulty];
+    this.highScore = this.getHighScore(this.difficulty);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('firestarter_difficulty', this.difficulty);
+    }
+    audio.sfxMenuSelect();
+  }
+
   cyclePalette() {
     this.paletteIdx = (this.paletteIdx + 1) % this.paletteKeys.length;
     this.palette = PALETTES[this.paletteKeys[this.paletteIdx]];
@@ -73,19 +120,19 @@ export class Game {
   }
 
   startNewGame() {
-    this.city.init(BALANCE.INITIAL_BUILDING_RATIO, { x: 10, y: 10 });
-    this.player.reset(10, 10);
+    this.city.init(this.balance.INITIAL_BUILDING_RATIO, { x: 10, y: 10 }, this.balance);
+    this.player.reset(10, 10, this.balance);
 
     // Spawn 2 Police Officers on roads away from player
     this.policeUnits = [
-      new Police(2, 2),
-      new Police(17, 17)
+      new Police(2, 2, this.balance),
+      new Police(17, 17, this.balance)
     ];
 
     // Spawn 2 Firefighter units
     this.firefighters = [
-      new Firefighter(2, 17),
-      new Firefighter(17, 2)
+      new Firefighter(2, 17, this.balance),
+      new Firefighter(17, 2, this.balance)
     ];
 
     this.projectiles = [];
@@ -110,10 +157,12 @@ export class Game {
     if (this.tributeScore > this.highScore) {
       this.highScore = this.tributeScore;
       if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`firestarter_highscore_${this.difficulty.toLowerCase()}`, String(this.highScore));
         localStorage.setItem('firestarter_highscore', String(this.highScore));
       }
     }
 
+    audio.stopBGM();
     audio.sfxGameOver(reason.id);
   }
 
@@ -142,7 +191,11 @@ export class Game {
 
     if (this.state === GAME_STATES.TITLE) {
       this.titleAnimTime += dt;
-      if (input.aJustPressed || input.startJustPressed) {
+      if (input.upJustPressed || input.leftJustPressed) {
+        this.cycleDifficulty(-1);
+      } else if (input.downJustPressed || input.rightJustPressed) {
+        this.cycleDifficulty(1);
+      } else if (input.aJustPressed || input.startJustPressed) {
         this.startNewGame();
       } else if (input.selectJustPressed) {
         this.cyclePalette();
@@ -154,6 +207,7 @@ export class Game {
       if (input.aJustPressed || input.startJustPressed) {
         this.startNewGame();
       } else if (input.bJustPressed) {
+        this.highScore = this.getHighScore(this.difficulty);
         this.state = GAME_STATES.TITLE;
         audio.sfxMenuSelect();
       }
@@ -250,9 +304,10 @@ export class Game {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i];
       proj.update(dt, this.city, audio, enemies, (stunnedEnemy) => {
+        const bonus = (this.balance && this.balance.STUN_SCORE_BONUS) || BALANCE.STUN_SCORE_BONUS || 250;
         audio.sfxStun();
-        this.addTributeScore(BALANCE.STUN_SCORE_BONUS || 250);
-        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, 'STUN! +250');
+        this.addTributeScore(bonus);
+        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, `STUN! +${bonus}`);
         this.triggerShake(0.25, 3);
       });
       if (proj.isDead) this.projectiles.splice(i, 1);
@@ -261,9 +316,10 @@ export class Game {
     for (let i = this.bombs.length - 1; i >= 0; i--) {
       const bomb = this.bombs[i];
       bomb.update(dt, this.city, audio, enemies, (stunnedEnemy) => {
+        const bonus = (this.balance && this.balance.STUN_SCORE_BONUS) || BALANCE.STUN_SCORE_BONUS || 250;
         audio.sfxStun();
-        this.addTributeScore(BALANCE.STUN_SCORE_BONUS || 250);
-        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, 'BLAST STUN! +250');
+        this.addTributeScore(bonus);
+        this.spawnFloatingText(stunnedEnemy.x * TILE_SIZE, stunnedEnemy.y * TILE_SIZE - 6, `BLAST STUN! +${bonus}`);
         this.triggerShake(0.4, 5);
       });
       if (bomb.isDead) this.bombs.splice(i, 1);
@@ -294,7 +350,8 @@ export class Game {
     }
 
     // Condition B: Crushed by Endsville Growth (完全浸食・圧殺)
-    if (buildingRatio >= BALANCE.DANGER_HIGH_BUILDING || this.isPlayerTrapped()) {
+    const dangerHigh = (this.balance && this.balance.DANGER_HIGH_BUILDING) || BALANCE.DANGER_HIGH_BUILDING || 0.90;
+    if (buildingRatio >= dangerHigh || this.isPlayerTrapped()) {
       this.gameOver(DEATH_REASONS.CRUSHED);
       return;
     }
@@ -507,8 +564,15 @@ export class Game {
 
     // City Ratio Bar
     const ratio = Math.round(this.city.getBuildingRatio() * 100);
-    ctx.fillStyle = (ratio >= 80 || ratio <= 10) ? p.c3 : p.c2;
-    ctx.fillText(`CITY:${ratio}%`, 90, 12);
+    const lowDanger = ratio <= 12;
+    const highDanger = ratio >= 80;
+    if (lowDanger && Math.floor(Date.now() / 250) % 2 === 0) {
+      ctx.fillStyle = p.accentRed || p.c3;
+      ctx.fillText(`CITY:${ratio}%!BURN!`, 82, 12);
+    } else {
+      ctx.fillStyle = (highDanger || lowDanger) ? (p.accentRed || p.c3) : p.c2;
+      ctx.fillText(`CITY:${ratio}%`, 90, 12);
+    }
 
     // Selected Weapon & Ammo
     const item = this.player.getSelectedItem();
@@ -547,14 +611,14 @@ export class Game {
     ctx.textAlign = 'center';
     ctx.fillStyle = p.c3;
     ctx.font = 'bold 18px monospace';
-    ctx.fillText('FIRE STARTER', this.width / 2, 60);
+    ctx.fillText('FIRE STARTER', this.width / 2, 46);
 
     ctx.font = '10px monospace';
     ctx.fillStyle = p.c2;
-    ctx.fillText('FLCL / CANTI-LORD EDITION', this.width / 2, 78);
+    ctx.fillText('FLCL / CANTI-LORD EDITION', this.width / 2, 63);
 
     // Sacred Flame Icon in Center
-    const flameY = 120;
+    const flameY = 82;
     const blink = Math.floor(this.titleAnimTime * 4) % 2;
     this.renderer.drawFire(ctx, this.width / 2 - 16, flameY, blink);
     this.renderer.drawFire(ctx, this.width / 2, flameY, (blink + 1) % 2);
@@ -562,22 +626,57 @@ export class Game {
     // Philosophy Quote
     ctx.font = '9px monospace';
     ctx.fillStyle = p.c2;
-    ctx.fillText('「救済も完全な勝利も存在しない」', this.width / 2, 175);
-    ctx.fillText('燃やし尽くせば帰る場所を失い、', this.width / 2, 192);
-    ctx.fillText('燃やさなければ街に呑まれる。', this.width / 2, 207);
+    ctx.fillText('「救済も完全な勝利も存在しない」', this.width / 2, 118);
+    ctx.fillText('燃やし尽くせば帰る場所を失い、', this.width / 2, 131);
+    ctx.fillText('燃やさなければ街に呑まれる。', this.width / 2, 144);
 
-    // High Score
+    // Difficulty Selector
+    const diffY = 168;
+    ctx.fillStyle = p.c2;
+    ctx.font = '8px monospace';
+    ctx.fillText('DIFFICULTY: [ ▲ / ▼ / ◀ / ▶ ]', this.width / 2, diffY);
+
+    const diffOptions = [
+      { key: 'EASY', label: 'EASY', x: 68 },
+      { key: 'NORMAL', label: 'NORMAL', x: 160 },
+      { key: 'HARD', label: 'HARD', x: 252 }
+    ];
+
+    diffOptions.forEach((opt) => {
+      const isSel = opt.key === this.difficulty;
+      if (isSel) {
+        ctx.fillStyle = p.c3;
+        ctx.fillRect(opt.x - 34, diffY + 7, 68, 16);
+        ctx.fillStyle = p.bg;
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText(opt.label, opt.x, diffY + 19);
+      } else {
+        ctx.strokeStyle = p.c1;
+        ctx.strokeRect(opt.x - 34, diffY + 7, 68, 16);
+        ctx.fillStyle = p.c1;
+        ctx.font = '10px monospace';
+        ctx.fillText(opt.label, opt.x, diffY + 19);
+      }
+    });
+
+    // Difficulty description text
+    ctx.font = '9px monospace';
+    ctx.fillStyle = p.c2;
+    ctx.fillText(this.balance.desc || '', this.width / 2, diffY + 36);
+
+    // High Score for selected difficulty
     ctx.fillStyle = p.c3;
-    ctx.fillText(`HIGH TRIBUTE: ${this.highScore}`, this.width / 2, 235);
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText(`HIGH TRIBUTE (${this.difficulty}): ${this.highScore}`, this.width / 2, 230);
 
     // Start instructions
     if (Math.floor(this.titleAnimTime * 2) % 2 === 0) {
       ctx.fillStyle = p.c3;
       ctx.font = 'bold 11px monospace';
-      ctx.fillText('PRESS [A] TO BURN', this.width / 2, 268);
+      ctx.fillText('PRESS [A] TO BURN', this.width / 2, 264);
     }
 
-    ctx.font = '9px monospace';
+    ctx.font = '8px monospace';
     ctx.fillStyle = p.c1;
     ctx.fillText(`[SELECT]: PALETTE (${this.palette.name})`, this.width / 2, 292);
 
@@ -603,7 +702,8 @@ export class Game {
     ctx.fillText(`SURVIVED: ${Math.floor(this.survivalTime)}s`, this.width / 2, 100);
     ctx.fillText(`BURNED BLOCKS: ${this.city.totalBuildingsBurned}`, this.width / 2, 120);
     ctx.fillText(`CITY DENSITY: ${Math.round(this.city.getBuildingRatio() * 100)}%`, this.width / 2, 140);
-    ctx.fillText(`FIRES ACTIVE: ${this.city.getActiveFires().length}`, this.width / 2, 160);
+    ctx.fillText(`FIRES ACTIVE: ${this.city.getActiveFires().length}`, this.width / 2, 156);
+    ctx.fillText(`DIFFICULTY: ${this.difficulty}`, this.width / 2, 172);
 
     ctx.font = '9px monospace';
     ctx.fillStyle = p.c1;
