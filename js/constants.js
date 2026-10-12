@@ -1,8 +1,8 @@
 // Constants and Configuration for Fire Starter
 
-export const APP_VERSION = 'v1.6.0';
+export const APP_VERSION = 'v1.6.2';
 export const GITHUB_REPO = 'yumeno1123/Fire_Starter';
-export const CURRENT_COMMIT_SHORT = '7ebb3c1';
+export const CURRENT_COMMIT_SHORT = 'b774f05';
 
 export const GRID_COLS = 20;
 export const GRID_ROWS = 20;

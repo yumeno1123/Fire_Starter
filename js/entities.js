@@ -78,6 +78,28 @@ export class Player {
     return tile;
   }
 
+  canOccupy(px, py, city) {
+    // Player hitbox centered at (px + 0.5, py + 0.5)
+    // Half-size: 0.32 tiles (approx 10.2px in 16px tile)
+    const half = 0.32;
+    const minX = px + 0.5 - half;
+    const maxX = px + 0.5 + half;
+    const minY = py + 0.5 - half;
+    const maxY = py + 0.5 + half;
+
+    const tx1 = Math.floor(minX);
+    const tx2 = Math.floor(maxX);
+    const ty1 = Math.floor(minY);
+    const ty2 = Math.floor(maxY);
+
+    for (let r = ty1; r <= ty2; r++) {
+      for (let c = tx1; c <= tx2; c++) {
+        if (!city.isWalkable(c, r)) return false;
+      }
+    }
+    return true;
+  }
+
   update(dt, input, city) {
     // 1. Dash & Stamina Management
     const bal = this.balance || BALANCE;
@@ -113,30 +135,100 @@ export class Player {
         this.walkFrame = (this.walkFrame + 1) % 2;
       }
 
-      const nextX = this.x + dx * speed * dt;
-      const nextY = this.y + dy * speed * dt;
+      const half = 0.32;
+      const totalDist = speed * dt;
+      // Substep to prevent tunneling and allow smooth wall alignment (max 0.1 tile per substep)
+      const maxSubStep = 0.1;
+      const numSteps = Math.max(1, Math.ceil(totalDist / maxSubStep));
+      const stepDist = totalDist / numSteps;
+      const subDt = dt / numSteps;
 
-      // Axis-separated collision test with margin
-      const margin = 0.25;
+      for (let s = 0; s < numSteps; s++) {
+        const targetX = Math.max(0, Math.min(city.cols - 1, this.x + dx * stepDist));
+        const targetY = Math.max(0, Math.min(city.rows - 1, this.y + dy * stepDist));
 
-      // Check horizontal move
-      const testX = (dx > 0) ? nextX + margin : nextX - margin;
-      const tX1 = Math.floor(testX);
-      const tY1 = Math.floor(this.y - margin);
-      const tY2 = Math.floor(this.y + margin);
+        // 1. Direct move test
+        if (this.canOccupy(targetX, targetY, city)) {
+          this.x = targetX;
+          this.y = targetY;
+        } else {
+          // 2. Axis-separated movement (wall sliding)
+          let movedX = false;
+          let movedY = false;
 
-      if (city.isWalkable(tX1, tY1) && city.isWalkable(tX1, tY2)) {
-        this.x = Math.max(0, Math.min(city.cols - 1, nextX));
-      }
+          if (dx !== 0 && this.canOccupy(targetX, this.y, city)) {
+            this.x = targetX;
+            movedX = true;
+          }
 
-      // Check vertical move
-      const testY = (dy > 0) ? nextY + margin : nextY - margin;
-      const tY = Math.floor(testY);
-      const tX_1 = Math.floor(this.x - margin);
-      const tX_2 = Math.floor(this.x + margin);
+          if (dy !== 0 && this.canOccupy(this.x, targetY, city)) {
+            this.y = targetY;
+            movedY = true;
+          }
 
-      if (city.isWalkable(tX_1, tY) && city.isWalkable(tX_2, tY)) {
-        this.y = Math.max(0, Math.min(city.rows - 1, nextY));
+          // 3. Corner Assist: if moving on one primary axis and clipping a building corner
+          const nudgeSpeed = speed * subDt;
+
+          if (dx !== 0 && dy === 0 && !movedX) {
+            const minHitY = Math.floor(this.y + 0.5 - half);
+            const maxHitY = Math.floor(this.y + 0.5 + half);
+
+            if (minHitY !== maxHitY) {
+              const testCol = (dx > 0)
+                ? Math.floor(targetX + 0.5 + half)
+                : Math.floor(targetX + 0.5 - half);
+
+              const topWalkable = city.isWalkable(testCol, minHitY);
+              const btmWalkable = city.isWalkable(testCol, maxHitY);
+
+              let nudgeDir = 0;
+              if (topWalkable && !btmWalkable) {
+                nudgeDir = -1; // Obstacle is at bottom; nudge UP
+              } else if (!topWalkable && btmWalkable) {
+                nudgeDir = 1;  // Obstacle is at top; nudge DOWN
+              }
+
+              if (nudgeDir !== 0) {
+                const testY = this.y + nudgeDir * nudgeSpeed;
+                if (this.canOccupy(this.x, testY, city)) {
+                  this.y = testY;
+                  if (this.canOccupy(targetX, this.y, city)) {
+                    this.x = targetX;
+                  }
+                }
+              }
+            }
+          } else if (dy !== 0 && dx === 0 && !movedY) {
+            const minHitX = Math.floor(this.x + 0.5 - half);
+            const maxHitX = Math.floor(this.x + 0.5 + half);
+
+            if (minHitX !== maxHitX) {
+              const testRow = (dy > 0)
+                ? Math.floor(targetY + 0.5 + half)
+                : Math.floor(targetY + 0.5 - half);
+
+              const leftWalkable = city.isWalkable(minHitX, testRow);
+              const rightWalkable = city.isWalkable(maxHitX, testRow);
+
+              let nudgeDir = 0;
+              if (leftWalkable && !rightWalkable) {
+                nudgeDir = -1; // Obstacle is at right; nudge LEFT
+              } else if (!leftWalkable && rightWalkable) {
+                nudgeDir = 1;  // Obstacle is at left; nudge RIGHT
+              }
+
+              if (nudgeDir !== 0) {
+                const testX = this.x + nudgeDir * nudgeSpeed;
+                if (this.canOccupy(testX, this.y, city)) {
+                  this.x = testX;
+                  if (this.canOccupy(this.x, targetY, city)) {
+                    this.y = targetY;
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

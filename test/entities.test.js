@@ -65,6 +65,58 @@ test('Player: movement and collision against buildings', () => {
   assert.ok(player.x < 5.0, 'Player should move freely on open road');
 });
 
+test('Player: moves freely in 1-tile wide corridor flanked by buildings', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+  // Row 4 and Row 6 are walls; Row 5 is 1-tile wide corridor
+  for (let c = 0; c < 10; c++) {
+    city.grid[4][c] = TILES.BUILDING;
+    city.grid[6][c] = TILES.BUILDING;
+  }
+
+  const player = new Player(2.0, 5.0);
+  const inputRight = { up: false, down: false, left: false, right: true, bHeld: false };
+  player.update(0.2, inputRight, city);
+
+  assert.ok(player.x > 2.5, 'Player should move smoothly through 1-tile corridor without snagging on adjacent walls');
+});
+
+test('Player: corner assist smoothly guides player around building corners', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+  // Building at (6, 5) and (6, 6)
+  city.grid[5][6] = TILES.BUILDING;
+  city.grid[6][6] = TILES.BUILDING;
+
+  // Player at (5.0, 4.8) moving RIGHT into tile (6, 4) which is open, but clipped slightly at top edge
+  const player = new Player(5.0, 4.8);
+  const inputRight = { up: false, down: false, left: false, right: true, bHeld: false };
+  player.update(0.3, inputRight, city);
+
+  assert.ok(player.x > 5.5, 'Corner assist should allow player to slide around the building corner');
+});
+
+test('Player: diagonal input smoothly slides along solid walls', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+  // Wall on column 6
+  for (let r = 0; r < 10; r++) city.grid[r][6] = TILES.BUILDING;
+
+  const player = new Player(5.15, 5.0);
+  // Press DOWN + RIGHT into the wall
+  const inputDownRight = { up: false, down: true, left: false, right: true, bHeld: false };
+  player.update(0.2, inputDownRight, city);
+
+  assert.ok(player.y > 5.3, 'Player should slide downward along the vertical wall');
+  assert.ok(player.x < 5.3, 'Player should be stopped horizontally by the wall');
+});
+
 test('Player: dash stamina consumption and recovery', () => {
   const city = new City(10, 10);
   for (let r = 0; r < 10; r++) {
