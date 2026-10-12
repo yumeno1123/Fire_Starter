@@ -177,6 +177,7 @@ export const DIFFICULTY_SETTINGS = {
     FIRE_DECAY_RATE: 0.80,        // Decays fast so fires don't engulf whole map
     WATER_DURATION: 4.0,
     EMERGENCY_REGROWTH_RATIO: 0.12, // Demonic city emergency sprout under 12%
+    ISOLATED_SPROUT_CHANCE: 0.008,  // 0.8% isolated spontaneous sprout chance (neighbors === 0)
     PLAYER_SPEED: 4.8,
     PLAYER_DASH_SPEED: 7.8,
     POLICE_SPEED_PATROL: 1.9,
@@ -212,6 +213,7 @@ export const DIFFICULTY_SETTINGS = {
     FIRE_DECAY_RATE: 0.85,
     WATER_DURATION: 4.5,
     EMERGENCY_REGROWTH_RATIO: 0.07, // Demonic city emergency sprout under 7%
+    ISOLATED_SPROUT_CHANCE: 0.015,  // 1.5% isolated spontaneous sprout chance (neighbors === 0)
     PLAYER_SPEED: 4.6,
     PLAYER_DASH_SPEED: 7.5,
     POLICE_SPEED_PATROL: 2.2,
@@ -247,6 +249,7 @@ export const DIFFICULTY_SETTINGS = {
     FIRE_DECAY_RATE: 0.90,
     WATER_DURATION: 5.0,
     EMERGENCY_REGROWTH_RATIO: 0.04,
+    ISOLATED_SPROUT_CHANCE: 0.025,  // 2.5% isolated spontaneous sprout chance (neighbors === 0)
     PLAYER_SPEED: 4.5,
     PLAYER_DASH_SPEED: 7.2,
     POLICE_SPEED_PATROL: 2.4,

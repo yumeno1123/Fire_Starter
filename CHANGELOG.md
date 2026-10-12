@@ -2,6 +2,19 @@
 
 All notable changes to the Fire Starter project will be documented in this file.
 
+## [1.4.1] - 2026-10-12
+
+### Added & Tuned (都市自己増殖アルゴリズム: 孤立マスの自律発生確率)
+- **隣接建物ゼロ（孤立マス）での自然発生機能 (`js/city.js`, `js/constants.js`)**:
+  - 周囲に建物が1件もない開けた道・灰のマス（`neighbors === 0`）においても、低い確率で新しい建物が自律発生（Spontaneous Isolated Sprout）するようにセル・オートマトンアルゴリズムを拡張。
+  - 難易度ごとにパラメータ（`ISOLATED_SPROUT_CHANCE`）を定義：
+    - **EASY**: 0.8%
+    - **NORMAL**: 1.5%
+    - **HARD**: 2.5%
+  - プレイヤーの真下（足元）での即死発生防止セーフティは引き続き厳格に維持。
+- **自動テストの追加 (`test/city.test.js`)**:
+  - 周囲に建物が0棟の状態から孤立マスが自律発生すること、およびプレイヤー直下には発生しないことの決定論的ユニットテストを追加（全24テスト通過）。
+
 ## [1.4.0] - 2026-10-12
 
 ### Added & Enhanced (警察アルゴリズム大刷新: 炎トラップ撃退 & タックル突破)

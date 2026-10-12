@@ -93,6 +93,29 @@ test('City: cellular automaton growth', () => {
   assert.ok(countAfter >= countBefore, 'Autonomous growth must expand buildings over time');
 });
 
+test('City: isolated sprout when neighbors count is 0', () => {
+  // Test with forced 100% isolated sprout chance to ensure deterministic test
+  const customBalance = { ...BALANCE, ISOLATED_SPROUT_CHANCE: 1.0, EMERGENCY_REGROWTH_RATIO: 0 };
+  const city = new City(5, 5, customBalance);
+
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 5; c++) {
+      city.grid[r][c] = TILES.ROAD;
+    }
+  }
+
+  assert.equal(city.getBuildingCount(), 0);
+
+  // Growth step with player at (2, 2)
+  city.stepGrowth({ x: 2, y: 2 });
+
+  // Player position (2, 2) should NOT sprout
+  assert.equal(city.grid[2][2], TILES.ROAD, 'Player tile must not sprout directly');
+
+  // Other isolated tiles should have sprouted
+  assert.ok(city.getBuildingCount() > 0, 'Isolated tiles should sprout when neighbors === 0');
+});
+
 test('City: BFS pathfinding', () => {
   const city = new City(10, 10);
   // Clear all

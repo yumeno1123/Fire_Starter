@@ -144,6 +144,11 @@ export class City {
             sproutChance = 0.08;
           } else if (neighbors === 4) {
             sproutChance = 0.45;
+          } else if (neighbors === 0) {
+            // Spontaneous isolated sprouting on open road/ash
+            sproutChance = (this.balance && this.balance.ISOLATED_SPROUT_CHANCE !== undefined)
+              ? this.balance.ISOLATED_SPROUT_CHANCE
+              : 0.015;
           }
 
           // Ash has a small fertility recovery chance
