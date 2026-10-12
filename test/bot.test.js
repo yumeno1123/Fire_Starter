@@ -116,3 +116,27 @@ test('BotAgent: seals TIME_BOMB to prevent suicidal self-trapping explosions', (
   assert.equal(input.aJustPressed, false, 'Bot must never detonate TIME_BOMB');
   assert.equal(input.bJustPressed, true, 'Bot must cycle away from TIME_BOMB');
 });
+
+test('BotAgent: prioritizes higher-tier buildings when selecting adjacent targets', () => {
+  const canvas = createMockCanvas();
+  const game = new Game(canvas);
+  game.update(0.1, { startJustPressed: true });
+  const bot = new BotAgent();
+
+  // Position player at (10, 10)
+  game.player.x = 10;
+  game.player.y = 10;
+
+  // Set UP (10, 9) as Tier 1 building, RIGHT (11, 10) as Tier 3 building
+  game.city.grid[9][10] = TILES.BUILDING;
+  game.city.tier[9][10] = 1;
+
+  game.city.grid[10][11] = TILES.BUILDING;
+  game.city.tier[10][11] = 3;
+
+  const target = bot.findAdjacentFlammable(game.city, { x: 10, y: 10 });
+  assert.ok(target, 'Should find an adjacent flammable target');
+  assert.equal(target.dir, 'RIGHT', 'Should prioritize the Tier 3 building at RIGHT over Tier 1 at UP');
+  assert.equal(target.tier, 3);
+});
+

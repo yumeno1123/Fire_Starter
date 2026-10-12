@@ -326,14 +326,21 @@ export class BotAgent {
       { name: 'RIGHT', dx: 1, dy: 0 }
     ];
 
+    let bestTarget = null;
+    let maxTier = 0;
+
     for (const d of dirs) {
       const nx = pTile.x + d.dx;
       const ny = pTile.y + d.dy;
       if (city.isValid(nx, ny) && city.isFlammable(nx, ny) && city.fireTimer[ny][nx] <= 0) {
-        return { dir: d.name, x: nx, y: ny };
+        const tier = (typeof city.getBuildingTier === 'function') ? city.getBuildingTier(nx, ny) : 1;
+        if (tier > maxTier) {
+          maxTier = tier;
+          bestTarget = { dir: d.name, x: nx, y: ny, tier };
+        }
       }
     }
-    return null;
+    return bestTarget;
   }
 
   findSafeMolotovTarget(city, pTile) {
