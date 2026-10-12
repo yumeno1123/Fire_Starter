@@ -4,10 +4,14 @@ import { Game } from './game.js';
 import { InputManager } from './input.js';
 import { audio } from './audio.js';
 import { BotAgent } from './bot.js';
+import { initVersionBadge } from './version.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('game-screen');
   if (!canvas) return;
+
+  // Initialize GitHub version badge and update checker
+  initVersionBadge();
 
   const input = new InputManager();
   input.init();

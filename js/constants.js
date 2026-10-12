@@ -1,5 +1,9 @@
 // Constants and Configuration for Fire Starter
 
+export const APP_VERSION = 'v1.5.1';
+export const GITHUB_REPO = 'yumeno1123/Fire_Starter';
+export const CURRENT_COMMIT_SHORT = 'a0b1b14';
+
 export const GRID_COLS = 20;
 export const GRID_ROWS = 20;
 export const TILE_SIZE = 16; // Internal pixel render tile size (20 * 16 = 320px logical canvas)

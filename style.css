@@ -207,7 +207,15 @@ html, body {
 #bezel-footer {
   width: 100%;
   text-align: center;
-  padding-top: 5px;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.brand-wrapper {
+  line-height: 1.1;
 }
 
 .brand-text {
@@ -222,6 +230,90 @@ html, body {
   font-weight: 500;
   letter-spacing: 0.5px;
   color: #3f5166;
+}
+
+/* Version & GitHub Sync Badge */
+#version-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#version-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  font-size: 7.5px;
+  font-weight: 700;
+  color: #5a6677;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+#version-link:hover {
+  color: #a0b0c0;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+#version-tag {
+  color: #7b8899;
+}
+
+.sync-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #555555;
+  display: inline-block;
+  transition: all 0.3s ease;
+}
+
+.sync-dot.sync-checking {
+  background-color: #888888;
+  animation: pulse-sync 1.5s infinite alternate ease-in-out;
+}
+
+.sync-dot.sync-latest {
+  background-color: #00ff66;
+  box-shadow: 0 0 5px #00ff66;
+}
+
+.sync-dot.sync-update {
+  background-color: #ffaa00;
+  box-shadow: 0 0 6px #ffaa00;
+  animation: pulse-update 0.8s infinite alternate ease-in-out;
+}
+
+.sync-dot.sync-offline {
+  background-color: #444444;
+}
+
+#version-status-text {
+  font-size: 6.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  color: #6d7b8d;
+}
+
+#version-link:hover #version-status-text {
+  color: #9cb0c6;
+}
+
+@keyframes pulse-sync {
+  0% { opacity: 0.3; }
+  100% { opacity: 0.9; }
+}
+
+@keyframes pulse-update {
+  0% { opacity: 0.5; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1.2); }
 }
 
 /* --- Lower Section: Controller --- */
