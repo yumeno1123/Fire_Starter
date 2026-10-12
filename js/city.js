@@ -128,44 +128,39 @@ export class City {
 
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
-        // Tiles currently on fire or wet do not sprout
+        // Skip burning or wet tiles
         if (this.fireTimer[r][c] > 0 || this.wetTimer[r][c] > 0) continue;
 
+        // Never sprout directly on player tile (crush protection)
+        if (c === playerPos.x && r === playerPos.y) continue;
+
         const current = this.grid[r][c];
+        if (current !== TILES.ROAD && current !== TILES.ASH) continue;
 
-        if (current === TILES.ROAD || current === TILES.ASH) {
-          const neighbors = this.countBuildingNeighbors(c, r);
+        const neighbors = this.countBuildingNeighbors(c, r);
+        let sproutChance = 0;
 
-          // Growth rule: 2 or 3 adjacent buildings induce urban sprawl
-          let sproutChance = 0;
-          if (neighbors >= 2 && neighbors <= 3) {
-            sproutChance = 0.30;
-          } else if (neighbors === 1) {
-            sproutChance = 0.08;
-          } else if (neighbors === 4) {
-            sproutChance = 0.45;
-          } else if (neighbors === 0) {
-            // Spontaneous isolated sprouting on open road/ash
-            sproutChance = (this.balance && this.balance.ISOLATED_SPROUT_CHANCE !== undefined)
-              ? this.balance.ISOLATED_SPROUT_CHANCE
-              : 0.015;
-          }
+        if (neighbors === 0) {
+          // Spontaneous isolated sprouting on open road/ash
+          sproutChance = (this.balance && this.balance.ISOLATED_SPROUT_CHANCE !== undefined)
+            ? this.balance.ISOLATED_SPROUT_CHANCE
+            : 0.015;
+        } else if (neighbors === 1) {
+          sproutChance = 0.08;
+        } else if (neighbors <= 3) {
+          sproutChance = 0.30;
+        } else if (neighbors === 4) {
+          sproutChance = 0.45;
+        }
 
-          // Ash has a small fertility recovery chance
-          if (current === TILES.ASH) {
-            sproutChance *= 0.5;
-          }
+        // Ash has lower fertility
+        if (current === TILES.ASH) {
+          sproutChance *= 0.5;
+        }
 
-          // Do not directly crush player instantly without notice; give warning
-          const distToPlayer = Math.abs(c - playerPos.x) + Math.abs(r - playerPos.y);
-          if (distToPlayer === 0) {
-            sproutChance = 0; // Don't spawn directly beneath player
-          }
-
-          if (Math.random() < sproutChance) {
-            nextGrid[r][c] = TILES.BUILDING;
-            this.health[r][c] = 1.0;
-          }
+        if (Math.random() < sproutChance) {
+          nextGrid[r][c] = TILES.BUILDING;
+          this.health[r][c] = 1.0;
         }
       }
     }
@@ -178,15 +173,15 @@ export class City {
       let sprouted = 0;
       for (let r = 0; r < this.rows && sprouted < 2; r++) {
         for (let c = 0; c < this.cols && sprouted < 2; c++) {
-          if (nextGrid[r][c] === TILES.ROAD || nextGrid[r][c] === TILES.ASH) {
-            if (this.fireTimer[r][c] === 0 && this.wetTimer[r][c] === 0) {
-              const dist = Math.abs(c - playerPos.x) + Math.abs(r - playerPos.y);
-              if (dist >= 3 && Math.random() < 0.25) {
-                nextGrid[r][c] = TILES.BUILDING;
-                this.health[r][c] = 1.0;
-                sprouted++;
-              }
-            }
+          const isAvailable = nextGrid[r][c] === TILES.ROAD || nextGrid[r][c] === TILES.ASH;
+          const isExtinguished = this.fireTimer[r][c] === 0 && this.wetTimer[r][c] === 0;
+          if (!isAvailable || !isExtinguished) continue;
+
+          const dist = Math.abs(c - playerPos.x) + Math.abs(r - playerPos.y);
+          if (dist >= 3 && Math.random() < 0.25) {
+            nextGrid[r][c] = TILES.BUILDING;
+            this.health[r][c] = 1.0;
+            sprouted++;
           }
         }
       }
@@ -205,13 +200,13 @@ export class City {
     // 1. Update Wet Cooldowns
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
-        if (this.wetTimer[r][c] > 0) {
-          this.wetTimer[r][c] -= dt;
-          if (this.wetTimer[r][c] <= 0) {
-            this.wetTimer[r][c] = 0;
-            if (this.grid[r][c] === TILES.WET) {
-              this.grid[r][c] = TILES.ROAD;
-            }
+        if (this.wetTimer[r][c] <= 0) continue;
+
+        this.wetTimer[r][c] -= dt;
+        if (this.wetTimer[r][c] <= 0) {
+          this.wetTimer[r][c] = 0;
+          if (this.grid[r][c] === TILES.WET) {
+            this.grid[r][c] = TILES.ROAD;
           }
         }
       }
@@ -224,51 +219,49 @@ export class City {
 
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
-        if (this.fireTimer[r][c] > 0) {
-          this.fireTimer[r][c] -= dt;
+        if (this.fireTimer[r][c] <= 0) continue;
 
-          // Damage building if standing on one
+        this.fireTimer[r][c] -= dt;
+
+        // Damage building if standing on one
+        if (this.grid[r][c] === TILES.BUILDING) {
+          this.health[r][c] -= this.balance.BURNING_DAMAGE_RATE * dt;
+          if (this.health[r][c] <= 0) {
+            this.grid[r][c] = TILES.ASH;
+            this.health[r][c] = 0;
+            this.totalBuildingsBurned++;
+
+            if (onBuildingDestroyed) {
+              onBuildingDestroyed(c, r);
+            }
+
+            if (Math.random() < this.balance.ITEM_DROP_CHANCE) {
+              this.dropRandomItem(c, r);
+            }
+          }
+        }
+
+        // Fire Spread Check
+        if (isSpreadTick && this.fireTimer[r][c] > 0.5) {
+          const spreadChance = this.fireSpreadChance[r][c];
+          const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+          const decayRate = this.balance.FIRE_DECAY_RATE || 0.85;
+          for (const [dc, dr] of dirs) {
+            const nc = c + dc;
+            const nr = r + dr;
+            if (this.isFlammable(nc, nr) && Math.random() < spreadChance) {
+              this.fireTimer[nr][nc] = Math.max(2.0, this.fireTimer[r][c] * 0.85);
+              this.fireSpreadChance[nr][nc] = spreadChance * decayRate;
+            }
+          }
+        }
+
+        // Fire burns out
+        if (this.fireTimer[r][c] <= 0) {
+          this.fireTimer[r][c] = 0;
+          this.fireSpreadChance[r][c] = 0;
           if (this.grid[r][c] === TILES.BUILDING) {
-            this.health[r][c] -= this.balance.BURNING_DAMAGE_RATE * dt;
-            if (this.health[r][c] <= 0) {
-              this.grid[r][c] = TILES.ASH;
-              this.health[r][c] = 0;
-              this.totalBuildingsBurned++;
-
-              // Trigger score & item drop callback
-              if (onBuildingDestroyed) {
-                onBuildingDestroyed(c, r);
-              }
-
-              // Roll for item drop
-              if (Math.random() < this.balance.ITEM_DROP_CHANCE) {
-                this.dropRandomItem(c, r);
-              }
-            }
-          }
-
-          // Fire Spread Check
-          if (isSpreadTick && this.fireTimer[r][c] > 0.5) {
-            const spreadChance = this.fireSpreadChance[r][c];
-            const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-            const decayRate = this.balance.FIRE_DECAY_RATE || 0.85;
-            for (const [dc, dr] of dirs) {
-              const nc = c + dc;
-              const nr = r + dr;
-              if (this.isFlammable(nc, nr) && Math.random() < spreadChance) {
-                this.fireTimer[nr][nc] = Math.max(2.0, this.fireTimer[r][c] * 0.85);
-                this.fireSpreadChance[nr][nc] = spreadChance * decayRate;
-              }
-            }
-          }
-
-          // Fire burns out
-          if (this.fireTimer[r][c] <= 0) {
-            this.fireTimer[r][c] = 0;
-            this.fireSpreadChance[r][c] = 0;
-            if (this.grid[r][c] === TILES.BUILDING) {
-              this.grid[r][c] = TILES.ASH;
-            }
+            this.grid[r][c] = TILES.ASH;
           }
         }
       }
