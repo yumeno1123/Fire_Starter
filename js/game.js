@@ -8,6 +8,7 @@ import {
   PALETTES,
   GAME_STATES,
   DEATH_REASONS,
+  TENSION_ZONES,
   DIFFICULTY_SETTINGS,
   DIFFICULTY_KEYS,
   BALANCE
@@ -58,6 +59,12 @@ export class Game {
     this.survivalTime = 0;
     this.comboCount = 0;
     this.comboTimer = 0;
+
+    // Ambivalence & Tension Zone mechanics
+    this.tensionTime = 0;
+    this.tensionTickTimer = 0;
+    this.maxTensionTime = 0;
+    this.ashFallParticles = [];
 
     // Title screen animation
     this.titleAnimTime = 0;
@@ -143,6 +150,10 @@ export class Game {
     this.survivalTime = 0;
     this.comboCount = 0;
     this.comboTimer = 0;
+    this.tensionTime = 0;
+    this.tensionTickTimer = 0;
+    this.maxTensionTime = 0;
+    this.ashFallParticles = [];
     this.deathReason = null;
 
     this.state = GAME_STATES.PLAYING;
@@ -166,11 +177,28 @@ export class Game {
     audio.sfxGameOver(reason.id);
   }
 
-  addTributeScore(points) {
+  getCurrentZone(ratio = null) {
+    const r = (ratio !== null) ? ratio : this.city.getBuildingRatio();
+    if (r <= TENSION_ZONES.FRENZY.threshold) {
+      return TENSION_ZONES.FRENZY;
+    }
+    if (r <= TENSION_ZONES.TENSION.max) {
+      return TENSION_ZONES.TENSION;
+    }
+    if (r <= TENSION_ZONES.STABLE.max) {
+      return TENSION_ZONES.STABLE;
+    }
+    return TENSION_ZONES.DENSE;
+  }
+
+  addTributeScore(points, applyZoneMultiplier = false) {
     this.comboCount++;
     this.comboTimer = 2.5; // Combo window
-    const multiplier = 1.0 + Math.min(2.0, (this.comboCount - 1) * 0.2);
-    this.tributeScore += Math.round(points * multiplier);
+    const comboMultiplier = 1.0 + Math.min(2.0, (this.comboCount - 1) * 0.2);
+    const zoneMultiplier = applyZoneMultiplier ? (this.getCurrentZone().scoreMultiplier || 1.0) : 1.0;
+    const earned = Math.round(points * comboMultiplier * zoneMultiplier);
+    this.tributeScore += earned;
+    return earned;
   }
 
   // Check if player has any accessible moves (trapped by buildings)
@@ -266,6 +294,28 @@ export class Game {
       }
     }
 
+    // Tension zone evaluation & dynamic audio synchronization
+    const currentBuildingRatio = this.city.getBuildingRatio();
+    const currentZone = this.getCurrentZone(currentBuildingRatio);
+    audio.setCityRatio(currentBuildingRatio);
+
+    if (currentZone === TENSION_ZONES.TENSION) {
+      this.tensionTime += dt;
+      if (this.tensionTime > this.maxTensionTime) {
+        this.maxTensionTime = this.tensionTime;
+      }
+      this.tensionTickTimer += dt;
+      if (this.tensionTickTimer >= 1.0) {
+        this.tensionTickTimer -= 1.0;
+        const borderBonus = TENSION_ZONES.TENSION.perSecondBonus || 30;
+        this.tributeScore += borderBonus;
+        audio.sfxTensionBonus();
+        this.spawnFloatingText(this.player.x * TILE_SIZE, this.player.y * TILE_SIZE - 4, `+${borderBonus} BORDER`);
+      }
+    } else {
+      this.tensionTickTimer = 0;
+    }
+
     // Screen Shake decay
     if (this.shakeTimer > 0) {
       this.shakeTimer -= dt;
@@ -292,8 +342,8 @@ export class Game {
 
     // 2. Update City Simulation
     this.city.update(dt, pTile, (bx, by) => {
-      // Building incinerated callback
-      this.addTributeScore(100);
+      // Building incinerated callback (applies fire tension zone multiplier)
+      this.addTributeScore(100, true);
       this.spawnParticle(bx * TILE_SIZE + 8, by * TILE_SIZE + 8, 'fire_burst');
       this.triggerShake(0.12, 1.5);
     });
@@ -372,6 +422,30 @@ export class Game {
       p.y += p.vy * dt;
       p.life -= dt;
       if (p.life <= 0) this.particles.splice(i, 1);
+    }
+
+    // 8. Atmospheric Ash Snowfall (snowflakes of ash drifting as city burns)
+    const ashSnowRate = 0.15 + (1.0 - buildingRatio) * 0.40;
+    if (Math.random() < ashSnowRate) {
+      this.ashFallParticles.push({
+        x: Math.random() * (this.width + 40) - 20,
+        y: -2,
+        vx: (Math.random() - 0.5) * 8 + 6,
+        vy: 10 + Math.random() * 14,
+        life: 3.5,
+        maxLife: 3.5,
+        size: Math.random() < 0.7 ? 1 : 2
+      });
+    }
+
+    for (let i = this.ashFallParticles.length - 1; i >= 0; i--) {
+      const af = this.ashFallParticles[i];
+      af.x += af.vx * dt;
+      af.y += af.vy * dt;
+      af.life -= dt;
+      if (af.life <= 0 || af.y > this.height || af.x > this.width + 30) {
+        this.ashFallParticles.splice(i, 1);
+      }
     }
   }
 
@@ -526,8 +600,28 @@ export class Game {
       }
     }
 
+    // 9. Atmospheric Ash Snowfall (snow flakes drifting over city)
+    for (const af of this.ashFallParticles) {
+      ctx.fillStyle = (af.life > af.maxLife * 0.4) ? p.c2 : p.c1;
+      ctx.fillRect(Math.round(af.x), Math.round(af.y), af.size, af.size);
+    }
+
     // End World Transform (Screen Shake)
     ctx.restore();
+
+    // 10. Desolation Vignette (Void encroaches as city and player's refuge shrink)
+    const currentRenderRatio = this.city.getBuildingRatio();
+    if (currentRenderRatio <= 0.25 && typeof ctx.createRadialGradient === 'function') {
+      const voidFactor = Math.min(1.0, (0.25 - currentRenderRatio) / 0.20);
+      const grad = ctx.createRadialGradient(
+        this.width / 2, this.height / 2, 60 * (1.0 - voidFactor * 0.4),
+        this.width / 2, this.height / 2, 160
+      );
+      grad.addColorStop(0, 'rgba(8, 24, 32, 0)');
+      grad.addColorStop(1, `rgba(8, 24, 32, ${Math.min(0.70, 0.20 + voidFactor * 0.5)})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, this.width, this.height);
+    }
 
     // 9. Draw In-Game HUD overlay
     this.renderHUD();
@@ -562,16 +656,26 @@ export class Game {
     const scoreStr = String(this.tributeScore).padStart(6, '0');
     ctx.fillText(`SCR:${scoreStr}`, 4, 12);
 
-    // City Ratio Bar
-    const ratio = Math.round(this.city.getBuildingRatio() * 100);
+    // City Ratio & Ambivalence Zone Bar
+    const bRatio = this.city.getBuildingRatio();
+    const ratio = Math.round(bRatio * 100);
     const lowDanger = ratio <= 12;
-    const highDanger = ratio >= 80;
-    if (lowDanger && Math.floor(Date.now() / 250) % 2 === 0) {
+    const highDanger = ratio >= 75;
+    const currentZone = this.getCurrentZone(bRatio);
+
+    if (lowDanger) {
+      const blink = Math.floor(Date.now() / 200) % 2 === 0;
       ctx.fillStyle = p.accentRed || p.c3;
-      ctx.fillText(`CITY:${ratio}%!BURN!`, 82, 12);
+      ctx.fillText(blink ? `${ratio}%!NOWHERE!` : `${ratio}%!FRENZYx2.5!`, 72, 12);
+    } else if (currentZone === TENSION_ZONES.TENSION) {
+      ctx.fillStyle = p.c3;
+      ctx.fillText(`${ratio}%[TENSION]`, 74, 12);
+    } else if (highDanger) {
+      ctx.fillStyle = p.accentRed || p.c3;
+      ctx.fillText(`${ratio}%!DENSE!`, 78, 12);
     } else {
-      ctx.fillStyle = (highDanger || lowDanger) ? (p.accentRed || p.c3) : p.c2;
-      ctx.fillText(`CITY:${ratio}%`, 90, 12);
+      ctx.fillStyle = p.c2;
+      ctx.fillText(`CITY:${ratio}%`, 80, 12);
     }
 
     // Selected Weapon & Ammo
@@ -730,14 +834,15 @@ export class Game {
 
     ctx.font = '10px monospace';
     ctx.fillStyle = p.c2;
-    ctx.fillText(`現在の信仰値 (SCORE): ${this.tributeScore}`, this.width / 2, 88);
-    ctx.fillText(`最高信仰値 (BEST) : ${this.highScore}`, this.width / 2, 108);
+    ctx.fillText(`現在の信仰値 (SCORE): ${this.tributeScore}`, this.width / 2, 85);
+    ctx.fillText(`最高信仰値 (BEST) : ${this.highScore}`, this.width / 2, 102);
+    ctx.fillText(`境界維持時間 (TENSION): ${Math.floor(this.maxTensionTime)}秒`, this.width / 2, 119);
 
     ctx.fillStyle = p.c3;
     ctx.font = '9px monospace';
-    ctx.fillText('【所持火具】', this.width / 2, 138);
+    ctx.fillText('【所持火具】', this.width / 2, 142);
     ctx.fillStyle = p.c2;
-    ctx.fillText(`マッチ: x${this.player.ammo.MATCH}  ジッポー: x${this.player.ammo.LIGHTER}`, this.width / 2, 156);
+    ctx.fillText(`マッチ: x${this.player.ammo.MATCH}  ジッポー: x${this.player.ammo.LIGHTER}`, this.width / 2, 158);
     ctx.fillText(`火炎瓶: x${this.player.ammo.MOLOTOV}  時限爆弾: x${this.player.ammo.TIME_BOMB}`, this.width / 2, 174);
 
     ctx.font = '8px monospace';
@@ -765,45 +870,52 @@ export class Game {
     // Game Over Title
     ctx.fillStyle = p.c3;
     ctx.font = 'bold 15px monospace';
-    ctx.fillText('G A M E   O V E R', this.width / 2, 55);
+    ctx.fillText('G A M E   O V E R', this.width / 2, 53);
 
     // Death Title
     ctx.font = 'bold 12px monospace';
     ctx.fillStyle = p.accentRed;
-    ctx.fillText(`【 ${reason.title} 】`, this.width / 2, 80);
+    ctx.fillText(`【 ${reason.title} 】`, this.width / 2, 75);
 
     // Message
     ctx.font = '9px monospace';
     ctx.fillStyle = p.c2;
-    ctx.fillText(reason.msg, this.width / 2, 105);
+    ctx.fillText(reason.msg, this.width / 2, 98);
 
     // Result Stats
     ctx.fillStyle = p.c1;
-    ctx.fillRect(28, 120, this.width - 56, 1);
+    ctx.fillRect(28, 112, this.width - 56, 1);
 
     ctx.fillStyle = p.c3;
-    ctx.font = '10px monospace';
-    ctx.fillText(`奉納スコア: ${this.tributeScore}`, this.width / 2, 142);
-    ctx.fillText(`生存時間: ${Math.floor(this.survivalTime)}秒`, this.width / 2, 160);
-    ctx.fillText(`焼却棟数: ${this.city.totalBuildingsBurned}棟`, this.width / 2, 178);
+    ctx.font = '9px monospace';
+    ctx.fillText(`奉納スコア: ${this.tributeScore}`, this.width / 2, 130);
+    ctx.fillText(`生存時間: ${Math.floor(this.survivalTime)}秒`, this.width / 2, 145);
+    ctx.fillText(`境界維持(TENSION): ${Math.floor(this.maxTensionTime)}秒`, this.width / 2, 160);
+    ctx.fillText(`焼却棟数: ${this.city.totalBuildingsBurned}棟`, this.width / 2, 175);
 
     if (this.tributeScore >= this.highScore && this.tributeScore > 0) {
       ctx.fillStyle = p.c3;
-      ctx.fillText('* NEW RECORD *', this.width / 2, 198);
+      ctx.fillText('* NEW RECORD *', this.width / 2, 195);
     } else {
       ctx.fillStyle = p.c2;
-      ctx.fillText(`BEST SCORE: ${this.highScore}`, this.width / 2, 198);
+      ctx.fillText(`BEST SCORE: ${this.highScore}`, this.width / 2, 195);
     }
 
-    // Evaluation
-    ctx.font = '9px monospace';
-    ctx.fillStyle = p.c2;
-    ctx.fillText(reason.evaluation, this.width / 2, 225);
+    // Evaluation & Ambivalence Epilogue
+    if (reason.id === 'FULL_BURN') {
+      ctx.font = '8px monospace';
+      ctx.fillStyle = p.accentRed;
+      ctx.fillText('――悪の街を憎んだが、己の居場所も共に灰となった――', this.width / 2, 215);
+    } else {
+      ctx.font = '8px monospace';
+      ctx.fillStyle = p.c2;
+      ctx.fillText(reason.evaluation, this.width / 2, 215);
+    }
 
     // Prompt
     ctx.fillStyle = p.c3;
     ctx.font = 'bold 10px monospace';
-    ctx.fillText('A: 再度街を焼く / B: 終了', this.width / 2, 258);
+    ctx.fillText('A: 再度街を焼く / B: 終了', this.width / 2, 255);
 
     ctx.textAlign = 'left';
   }

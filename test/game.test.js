@@ -144,3 +144,42 @@ test('Game: difficulty selection, balance propagation, and high scores', () => {
   assert.equal(game.player.balance.id, 'HARD');
   assert.ok(game.player.ammo.MATCH < 15, 'HARD difficulty has scarcer initial ammo');
 });
+
+test('Game: tension zones, frenzy multipliers, and border survival bonus', () => {
+  const canvas = createMockCanvas();
+  const game = new Game(canvas);
+  game.startNewGame();
+
+  // 1. Zone classifications
+  assert.equal(game.getCurrentZone(0.50).name, 'STABLE (安定)');
+  assert.equal(game.getCurrentZone(0.25).name, 'TENSION (境界)');
+  assert.equal(game.getCurrentZone(0.08).name, 'FRENZY (狂気)');
+  assert.equal(game.getCurrentZone(0.85).name, 'DENSE (過密)');
+
+  // 2. FRENZY multiplier (2.5x)
+  game.comboCount = 0;
+  // Clear city down to 5%
+  for (let r = 0; r < game.city.rows; r++) {
+    for (let c = 0; c < game.city.cols; c++) {
+      if (r > 0) game.city.grid[r][c] = TILES.ROAD;
+    }
+  }
+  const frenzyScore = game.addTributeScore(100, true);
+  assert.equal(frenzyScore, 250);
+
+  // 3. Border survival bonus tick in TENSION zone
+  game.startNewGame();
+  // Set city ratio to 25% (TENSION zone)
+  for (let r = 0; r < game.city.rows; r++) {
+    for (let c = 0; c < game.city.cols; c++) {
+      game.city.grid[r][c] = (r < 5) ? TILES.BUILDING : TILES.ROAD;
+    }
+  }
+  assert.equal(game.getCurrentZone().name, 'TENSION (境界)');
+
+  const scoreBefore = game.tributeScore;
+  game.update(1.0, {});
+  assert.ok(game.tributeScore >= scoreBefore + 30, 'Should award border bonus (+30) in tension zone');
+  assert.ok(game.tensionTime >= 1.0, 'Tension survival time should accumulate');
+});
+

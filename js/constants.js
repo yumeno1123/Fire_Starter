@@ -110,21 +110,54 @@ export const GAME_STATES = {
 export const DEATH_REASONS = {
   FULL_BURN: {
     id: 'FULL_BURN',
-    title: '全焼（完全消滅）',
-    msg: '街をすべて焼き尽くし、汝の居場所も灰へと消えた。',
-    evaluation: '炎に呑まれし者よ、灰は汝を拒む。'
+    title: '全焼（居場所の消滅）',
+    msg: '悪の街をすべて焼き払ったが、汝自身の帰るべき場所も灰へと消えた。',
+    evaluation: 'すべてを燃やし尽くせば、己もまた世界から拒絶される。'
   },
   CRUSHED: {
     id: 'CRUSHED',
     title: '圧殺（完全浸食）',
     msg: '増殖するエンズビルのコンクリートに呑まれ、息絶えた。',
-    evaluation: '悪魔の街の血肉となり、世界に同化した。'
+    evaluation: '悪魔の街の血肉となり、日常の重圧に同化した。'
   },
   ARRESTED: {
     id: 'ARRESTED',
     title: '逮捕（現行犯捕縛）',
     msg: '警察官に包囲・捕縛され、黒き炎の儀式は途絶えた。',
     evaluation: '冷たい鉄格子の奥、神の呼び声は遠ざかる。'
+  }
+};
+
+export const TENSION_ZONES = {
+  FRENZY: {
+    threshold: 0.12,
+    name: 'FRENZY (狂気)',
+    hudTag: '!FRENZY x2.5!',
+    dangerMsg: '!NOWHERE TO GO!',
+    scoreMultiplier: 2.5
+  },
+  TENSION: {
+    min: 0.12,
+    max: 0.40,
+    name: 'TENSION (境界)',
+    hudTag: 'ZONE:TENSION',
+    scoreMultiplier: 1.5,
+    perSecondBonus: 30
+  },
+  STABLE: {
+    min: 0.40,
+    max: 0.70,
+    name: 'STABLE (安定)',
+    hudTag: 'ZONE:STABLE',
+    scoreMultiplier: 1.0,
+    perSecondBonus: 0
+  },
+  DENSE: {
+    min: 0.70,
+    name: 'DENSE (過密)',
+    hudTag: '!DENSE!',
+    dangerMsg: '!CRUSH ALERT!',
+    scoreMultiplier: 0.8
   }
 };
 

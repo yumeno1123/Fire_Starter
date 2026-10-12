@@ -8,7 +8,12 @@ class SoundSystem {
     this.bgmPlaying = false;
     this.bgmTimer = null;
     this.bgmStep = 0;
+    this.cityRatio = 0.4;
     this.initialized = false;
+  }
+
+  setCityRatio(ratio) {
+    this.cityRatio = (typeof ratio === 'number') ? ratio : 0.4;
   }
 
   init() {
@@ -205,14 +210,21 @@ class SoundSystem {
     this.playNoise(0.06, 0.15, 1000);
   }
 
+  sfxTensionBonus() {
+    this.ensureContext();
+    this.playTone(1320, 'sine', 0.05, 0.10, 1760);
+  }
+
   sfxGameOver(reasonId) {
     this.ensureContext();
     this.stopBGM();
     if (reasonId === 'FULL_BURN') {
-      // Hollow, wind/ash tone
-      this.playTone(440, 'triangle', 0.4, 0.3, 330);
-      setTimeout(() => this.playTone(330, 'triangle', 0.5, 0.3, 220), 300);
-      setTimeout(() => this.playTone(220, 'triangle', 0.8, 0.35, 110), 700);
+      // Hollow extinction resonance & desolate wind
+      this.playNoise(0.8, 0.28, 400);
+      this.playTone(440, 'triangle', 0.45, 0.25, 220);
+      setTimeout(() => this.playTone(330, 'triangle', 0.55, 0.25, 110), 300);
+      setTimeout(() => this.playNoise(0.9, 0.22, 200), 550);
+      setTimeout(() => this.playTone(110, 'sine', 1.0, 0.2, 55), 750);
     } else if (reasonId === 'CRUSHED') {
       // Heavy crushing descending tritone
       this.playTone(280, 'sawtooth', 0.25, 0.35, 140);
@@ -252,36 +264,49 @@ class SoundSystem {
       130.81, 130.81, 146.83, 146.83, 146.83, 146.83, 146.83, 146.83
     ];
 
-    const stepDurationMs = 155; // ~97 BPM 16th notes
+    const baseStepDuration = 155; // ~97 BPM 16th notes
 
     const tick = () => {
       if (!this.bgmPlaying) return;
       if (!this.muted && this.ctx) {
         const step = this.bgmStep % 32;
 
+        const isFrenzy = this.cityRatio <= 0.12;
+        const isLonely = this.cityRatio <= 0.30;
+        const isDense = this.cityRatio >= 0.75;
+
         // Lead melody
         const mFreq = melody[step];
         if (mFreq > 0) {
-          this.playTone(mFreq, 'square', 0.12, 0.11);
+          if (isFrenzy && Math.random() < 0.28) {
+            // High pitch frenzy glitch
+            this.playTone(mFreq * 1.5, 'square', 0.08, 0.12);
+          } else if (isLonely && Math.random() < 0.35) {
+            // Desolate pauses when the city is disappearing (whispering cold wind)
+            this.playNoise(0.08, 0.03, 700);
+          } else {
+            this.playTone(mFreq, isLonely ? 'triangle' : 'square', 0.12, 0.11);
+          }
         }
 
-        // Bass channel
+        // Bass channel (heavier sawtooth under dense city sprawl)
         const bFreq = bass[step];
         if (bFreq > 0 && step % 2 === 0) {
-          this.playTone(bFreq, 'triangle', 0.22, 0.18);
+          this.playTone(bFreq, isDense ? 'sawtooth' : 'triangle', 0.22, isDense ? 0.22 : 0.18);
         }
 
         // Noise percussion (snare on 4, 12, 20, 28)
         if (step % 8 === 4) {
           this.playNoise(0.05, 0.08, 1200);
         } else if (step % 4 === 0) {
-          // Subtle kick
-          this.playTone(90, 'sine', 0.06, 0.12, 35);
+          // Subtle kick or frantic heartbeat pulse
+          this.playTone(isFrenzy ? 75 : 90, 'sine', 0.07, isFrenzy ? 0.18 : 0.12, 30);
         }
       }
 
       this.bgmStep++;
-      this.bgmTimer = setTimeout(tick, stepDurationMs);
+      const currentStepDuration = (this.cityRatio <= 0.12) ? 122 : baseStepDuration;
+      this.bgmTimer = setTimeout(tick, currentStepDuration);
     };
 
     tick();
