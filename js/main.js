@@ -3,6 +3,7 @@
 import { Game } from './game.js';
 import { InputManager } from './input.js';
 import { audio } from './audio.js';
+import { BotAgent } from './bot.js';
 
 window.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('game-screen');
@@ -12,6 +13,28 @@ window.addEventListener('DOMContentLoaded', () => {
   input.init();
 
   const game = new Game(canvas);
+  const bot = new BotAgent();
+  let isAutoPlay = false;
+
+  const autoBtn = document.getElementById('btn-auto');
+  const toggleAutoPlay = () => {
+    isAutoPlay = !isAutoPlay;
+    game.isAutoPlay = isAutoPlay;
+    if (autoBtn) {
+      autoBtn.classList.toggle('active', isAutoPlay);
+    }
+  };
+
+  if (autoBtn) {
+    autoBtn.addEventListener('click', toggleAutoPlay);
+  }
+
+  // Keyboard shortcut [P] or [O] to toggle auto play
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyP' || e.code === 'KeyO') {
+      toggleAutoPlay();
+    }
+  });
 
   // Audio start on first user interaction
   const initAudioOnUserGesture = () => {
@@ -32,7 +55,14 @@ window.addEventListener('DOMContentLoaded', () => {
     // Cap delta time to avoid large jumps on tab switch
     const dt = Math.min(rawDt, 0.1);
 
-    game.update(dt, input.state);
+    // Compute input (Bot takes over when isAutoPlay is enabled)
+    let frameInput = input.state;
+    if (isAutoPlay) {
+      const botInput = bot.computeInput(game, dt);
+      frameInput = botInput;
+    }
+
+    game.update(dt, frameInput);
     game.render();
 
     input.resetFrameFlags();

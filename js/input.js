@@ -75,7 +75,6 @@ export class InputManager {
           this.state.bHeld = true;
           break;
         case 'Enter':
-        case 'KeyP':
           this.state.startJustPressed = true;
           break;
         case 'Tab':

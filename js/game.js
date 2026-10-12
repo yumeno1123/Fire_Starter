@@ -75,6 +75,9 @@ export class Game {
     // Screen Shake FX
     this.shakeTimer = 0;
     this.shakeIntensity = 0;
+
+    // Autonomous Auto-play state
+    this.isAutoPlay = false;
   }
 
   triggerShake(duration = 0.3, intensity = 4) {
@@ -744,9 +747,18 @@ export class Game {
     ctx.fillStyle = this.player.dashing ? p.c3 : p.c2;
     ctx.fillRect(230, 6, Math.round((this.player.stamina / 100) * 40), 6);
 
-    // Police Alert Beacon
+    // Police Alert Beacon & Auto Play Indicator
     const isAlert = this.policeUnits.some(pol => pol.state === 'CHASE');
-    if (isAlert && Math.floor(Date.now() / 200) % 2 === 0) {
+    if (this.isAutoPlay) {
+      const blink = Math.floor(Date.now() / 250) % 2 === 0;
+      if (isAlert) {
+        ctx.fillStyle = blink ? (p.accentRed || p.c3) : p.c3;
+        ctx.fillText(blink ? '!ALERT!' : '[AUTO]', 275, 12);
+      } else if (blink) {
+        ctx.fillStyle = p.c3;
+        ctx.fillText('[AUTO]', 275, 12);
+      }
+    } else if (isAlert && Math.floor(Date.now() / 200) % 2 === 0) {
       ctx.fillStyle = p.c3;
       ctx.fillText('!ALERT!', 280, 12);
     }

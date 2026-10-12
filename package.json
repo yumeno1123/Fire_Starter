@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.js",
+    "simulate": "node scripts/simulate.js",
     "start": "node server.js"
   },
   "keywords": [
