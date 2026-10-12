@@ -1,34 +1,31 @@
 @echo off
-chcp 65001 >nul
-title FLCL Fire Starter
+title FLCL: Fire Starter
 cd /d "%~dp0"
 
 echo ========================================================
-echo   『フリクリ』FIRE STARTER（ファイヤースターター）
+echo   FLCL: Fire Starter Launcher
 echo ========================================================
 echo.
-echo ローカルサーバーを起動し、ブラウザを開きます...
-echo （ゲームを終了する時は、この画面を閉じてください）
-echo.
 
-:: ブラウザを自動起動
-start "" "http://localhost:8080"
-
-:: Node.js があれば npm start、なければ Python で起動
 where node >nul 2>&1
 if %ERRORLEVEL% equ 0 (
-    npm start
+    echo Starting server with Node.js...
+    node server.js
     goto end
 )
 
 where python >nul 2>&1
 if %ERRORLEVEL% equ 0 (
+    echo Node.js not detected. Starting with Python...
+    start "" "http://localhost:8080"
     python -m http.server 8080
     goto end
 )
 
-echo [エラー] Node.js または Python が見つかりませんでした。
-echo ゲームを実行するには Node.js または Python が必要です。
+echo.
+echo [ERROR] Neither Node.js nor Python was found on this system.
+echo Please install Node.js or Python to run Fire Starter.
+echo.
 pause
 
 :end
