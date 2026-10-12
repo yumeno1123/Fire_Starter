@@ -54,8 +54,10 @@ export class SpriteRenderer {
     if ((seed % 7) === 0) ctx.fillRect(x + 8, y + 8, 1, 1);
   }
 
-  drawBuilding(ctx, x, y, health = 1.0, isGrowing = false) {
-    // Outer wall
+  drawBuilding(ctx, x, y, health = 1.0, isGrowing = false, tier = 1) {
+    const healthRatio = Math.max(0, Math.min(1.0, health / (tier || 1)));
+
+    // Outer wall base
     ctx.fillStyle = this.p.c1;
     ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
 
@@ -63,20 +65,66 @@ export class SpriteRenderer {
     ctx.fillStyle = isGrowing ? this.p.c2 : this.p.c0;
     ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, TILE_SIZE - 2);
 
-    // Windows / Brutalist architecture details
-    ctx.fillStyle = this.p.c2;
-    ctx.fillRect(x + 3, y + 3, 3, 3);
-    ctx.fillRect(x + 10, y + 3, 3, 3);
-    ctx.fillRect(x + 3, y + 9, 3, 3);
-    ctx.fillRect(x + 10, y + 9, 3, 3);
+    if (tier >= 3) {
+      // Tier 3: High-Rise Brutalist Fortress / Monolith
+      // Heavy double reinforced rim
+      ctx.fillStyle = this.p.c2;
+      ctx.fillRect(x + 1, y + 1, TILE_SIZE - 2, 1);
+      ctx.fillRect(x + 1, y + TILE_SIZE - 2, TILE_SIZE - 2, 1);
+      ctx.fillRect(x + 1, y + 1, 1, TILE_SIZE - 2);
+      ctx.fillRect(x + TILE_SIZE - 2, y + 1, 1, TILE_SIZE - 2);
+
+      // Rooftop antenna spire
+      ctx.fillStyle = this.p.c3;
+      ctx.fillRect(x + 7, y - 2, 2, 3);
+
+      // Dense illuminated glowing windows (c3)
+      ctx.fillStyle = this.p.c3;
+      ctx.fillRect(x + 3, y + 3, 2, 3);
+      ctx.fillRect(x + 7, y + 3, 2, 3);
+      ctx.fillRect(x + 11, y + 3, 2, 3);
+      ctx.fillRect(x + 3, y + 8, 2, 3);
+      ctx.fillRect(x + 7, y + 8, 2, 3);
+      ctx.fillRect(x + 11, y + 8, 2, 3);
+
+      // Structural steel pillars
+      ctx.fillStyle = this.p.c1;
+      ctx.fillRect(x + 5, y + 2, 1, 12);
+      ctx.fillRect(x + 10, y + 2, 1, 12);
+    } else if (tier === 2) {
+      // Tier 2: Mid-Rise Steel-Frame Building
+      // Concrete corner columns
+      ctx.fillStyle = this.p.c1;
+      ctx.fillRect(x + 1, y + 1, 1, TILE_SIZE - 2);
+      ctx.fillRect(x + TILE_SIZE - 2, y + 1, 1, TILE_SIZE - 2);
+
+      // 6 windows (c2) in 2 rows
+      ctx.fillStyle = this.p.c2;
+      ctx.fillRect(x + 3, y + 3, 2, 3);
+      ctx.fillRect(x + 7, y + 3, 2, 3);
+      ctx.fillRect(x + 11, y + 3, 2, 3);
+      ctx.fillRect(x + 3, y + 9, 2, 3);
+      ctx.fillRect(x + 7, y + 9, 2, 3);
+      ctx.fillRect(x + 11, y + 9, 2, 3);
+
+      // Center steel reinforcement beam
+      ctx.fillRect(x + 2, y + 7, TILE_SIZE - 4, 1);
+    } else {
+      // Tier 1: Low-Rise Building (Classic 4-window brutalist unit)
+      ctx.fillStyle = this.p.c2;
+      ctx.fillRect(x + 3, y + 3, 3, 3);
+      ctx.fillRect(x + 10, y + 3, 3, 3);
+      ctx.fillRect(x + 3, y + 9, 3, 3);
+      ctx.fillRect(x + 10, y + 9, 3, 3);
+    }
 
     // Damaged crack lines when damaged by fire
-    if (health < 0.7) {
+    if (healthRatio < 0.65) {
       ctx.fillStyle = this.p.c3;
       ctx.fillRect(x + 6, y + 2, 1, 4);
       ctx.fillRect(x + 7, y + 5, 2, 1);
     }
-    if (health < 0.4) {
+    if (healthRatio < 0.35) {
       ctx.fillStyle = this.p.c0;
       ctx.fillRect(x + 2, y + 11, 4, 1);
       ctx.fillRect(x + 5, y + 12, 1, 3);

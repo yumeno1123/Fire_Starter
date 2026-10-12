@@ -9,6 +9,7 @@ export class City {
     this.balance = balance || BALANCE;
     this.grid = new Array(rows).fill(0).map(() => new Array(cols).fill(TILES.ROAD));
     this.health = new Array(rows).fill(1).map(() => new Array(cols).fill(1.0));
+    this.tier = new Array(rows).fill(1).map(() => new Array(cols).fill(1));
     this.fireTimer = new Array(rows).fill(0).map(() => new Array(cols).fill(0));
     this.fireSpreadChance = new Array(rows).fill(0).map(() => new Array(cols).fill(0));
     this.wetTimer = new Array(rows).fill(0).map(() => new Array(cols).fill(0));
@@ -36,6 +37,7 @@ export class City {
       for (let c = 0; c < this.cols; c++) {
         this.grid[r][c] = TILES.ROAD;
         this.health[r][c] = 1.0;
+        this.tier[r][c] = 1;
         this.fireTimer[r][c] = 0;
         this.fireSpreadChance[r][c] = 0;
         this.wetTimer[r][c] = 0;
@@ -55,9 +57,11 @@ export class City {
         if (!isStreet && Math.random() < (initialRatio * 1.5)) {
           this.grid[r][c] = TILES.BUILDING;
           this.health[r][c] = 1.0;
+          this.tier[r][c] = 1;
         } else if (isStreet && Math.random() < 0.12) {
           this.grid[r][c] = TILES.BUILDING;
           this.health[r][c] = 1.0;
+          this.tier[r][c] = 1;
         }
       }
     }
@@ -135,9 +139,30 @@ export class City {
         if (c === playerPos.x && r === playerPos.y) continue;
 
         const current = this.grid[r][c];
+        const neighbors = this.countBuildingNeighbors(c, r);
+
+        // 1. Existing Building: Check for tier upgrade (Lv1 -> Lv2 -> Lv3)
+        if (current === TILES.BUILDING) {
+          if (this.tier[r][c] < 3) {
+            let upgradeChance = 0.08;
+            if (neighbors >= 3) {
+              upgradeChance = 0.28;
+            } else if (neighbors >= 1) {
+              upgradeChance = 0.16;
+            }
+
+            if (Math.random() < upgradeChance) {
+              this.tier[r][c] += 1;
+              this.health[r][c] = this.tier[r][c]; // Sets max HP to 2.0 or 3.0
+              this.growingTimer[r][c] = 0.4; // Visual pulse
+            }
+          }
+          continue;
+        }
+
+        // 2. Open space: Sprout new Lv1 building
         if (current !== TILES.ROAD && current !== TILES.ASH) continue;
 
-        const neighbors = this.countBuildingNeighbors(c, r);
         let sproutChance = 0;
 
         if (neighbors === 0) {
@@ -160,6 +185,7 @@ export class City {
 
         if (Math.random() < sproutChance) {
           nextGrid[r][c] = TILES.BUILDING;
+          this.tier[r][c] = 1;
           this.health[r][c] = 1.0;
         }
       }
@@ -180,6 +206,7 @@ export class City {
           const dist = Math.abs(c - playerPos.x) + Math.abs(r - playerPos.y);
           if (dist >= 3 && Math.random() < 0.25) {
             nextGrid[r][c] = TILES.BUILDING;
+            this.tier[r][c] = 1;
             this.health[r][c] = 1.0;
             sprouted++;
           }
@@ -227,16 +254,20 @@ export class City {
         if (this.grid[r][c] === TILES.BUILDING) {
           this.health[r][c] -= this.balance.BURNING_DAMAGE_RATE * dt;
           if (this.health[r][c] <= 0) {
+            const destroyedTier = this.tier[r][c] || 1;
             this.grid[r][c] = TILES.ASH;
             this.health[r][c] = 0;
+            this.tier[r][c] = 1;
             this.totalBuildingsBurned++;
 
             if (onBuildingDestroyed) {
-              onBuildingDestroyed(c, r);
+              onBuildingDestroyed(c, r, destroyedTier);
             }
 
-            if (Math.random() < this.balance.ITEM_DROP_CHANCE) {
-              this.dropRandomItem(c, r);
+            const baseDrop = this.balance.ITEM_DROP_CHANCE || 0.42;
+            const dropChance = Math.min(0.95, baseDrop * (1 + (destroyedTier - 1) * 0.35));
+            if (Math.random() < dropChance) {
+              this.dropRandomItem(c, r, destroyedTier);
             }
           }
         }
@@ -275,19 +306,30 @@ export class City {
     }
   }
 
-  dropRandomItem(c, r) {
+  dropRandomItem(c, r, tier = 1) {
     const roll = Math.random();
     let type = 'MATCH';
-    if (roll < 0.40) {
-      type = 'MATCH';
-    } else if (roll < 0.70) {
-      type = 'LIGHTER';
-    } else if (roll < 0.90) {
-      type = 'MOLOTOV';
+    if (tier >= 3) {
+      if (roll < 0.20) type = 'MATCH';
+      else if (roll < 0.45) type = 'LIGHTER';
+      else if (roll < 0.75) type = 'MOLOTOV';
+      else type = 'TIME_BOMB';
+    } else if (tier === 2) {
+      if (roll < 0.30) type = 'MATCH';
+      else if (roll < 0.60) type = 'LIGHTER';
+      else if (roll < 0.85) type = 'MOLOTOV';
+      else type = 'TIME_BOMB';
     } else {
-      type = 'TIME_BOMB';
+      if (roll < 0.40) type = 'MATCH';
+      else if (roll < 0.70) type = 'LIGHTER';
+      else if (roll < 0.90) type = 'MOLOTOV';
+      else type = 'TIME_BOMB';
     }
     this.items.push({ x: c, y: r, type });
+  }
+
+  getBuildingTier(c, r) {
+    return (this.isValid(c, r) && this.grid[r][c] === TILES.BUILDING) ? (this.tier[r][c] || 1) : 0;
   }
 
   collectItem(playerTileX, playerTileY) {

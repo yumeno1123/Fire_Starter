@@ -352,11 +352,24 @@ export class Game {
     }
 
     // 2. Update City Simulation
-    this.city.update(dt, pTile, (bx, by) => {
+    this.city.update(dt, pTile, (bx, by, destroyedTier = 1) => {
       // Building incinerated callback (applies fire tension zone multiplier)
-      this.addTributeScore(100, true);
-      this.spawnParticle(bx * TILE_SIZE + 8, by * TILE_SIZE + 8, 'fire_burst');
-      this.triggerShake(0.12, 1.5);
+      const baseScore = 100 * (destroyedTier || 1);
+      this.addTributeScore(baseScore, true);
+
+      if (destroyedTier >= 3) {
+        this.spawnFloatingText(bx * TILE_SIZE, by * TILE_SIZE - 6, `+${baseScore} (LV3 MAX!)`);
+        this.spawnParticle(bx * TILE_SIZE + 8, by * TILE_SIZE + 8, 'fire_burst');
+        this.triggerShake(0.24, 3.2);
+        audio.sfxExplosion();
+      } else if (destroyedTier === 2) {
+        this.spawnFloatingText(bx * TILE_SIZE, by * TILE_SIZE - 6, `+${baseScore} (LV2)`);
+        this.spawnParticle(bx * TILE_SIZE + 8, by * TILE_SIZE + 8, 'fire_burst');
+        this.triggerShake(0.18, 2.2);
+      } else {
+        this.spawnParticle(bx * TILE_SIZE + 8, by * TILE_SIZE + 8, 'fire_burst');
+        this.triggerShake(0.12, 1.5);
+      }
     });
 
     // 3. Update Projectiles & Bombs
@@ -573,7 +586,9 @@ export class Game {
 
         if (tile === TILES.BUILDING) {
           const h = this.city.health[r][c];
-          this.renderer.drawBuilding(ctx, x, y, h);
+          const isGrowing = this.city.growingTimer[r][c] > 0;
+          const tier = this.city.tier ? this.city.tier[r][c] : 1;
+          this.renderer.drawBuilding(ctx, x, y, h, isGrowing, tier);
         } else if (tile === TILES.ASH) {
           this.renderer.drawAsh(ctx, x, y, c + r);
         } else if (tile === TILES.WET) {

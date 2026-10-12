@@ -671,6 +671,7 @@ export class TimeBomb {
                 // Instantly blow to ash
                 city.grid[ty][tx] = TILES.ASH;
                 city.health[ty][tx] = 0;
+                if (city.tier) city.tier[ty][tx] = 1;
                 city.totalBuildingsBurned++;
               }
               city.ignite(tx, ty, ITEMS.TIME_BOMB);

@@ -155,3 +155,66 @@ test('City: item drops and collection', () => {
   const emptyCollect = city.collectItem(5, 5);
   assert.equal(emptyCollect, null);
 });
+
+test('City: building tier upgrade (Lv1 -> Lv2 -> Lv3) and health scaling', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+
+  // Place a building surrounded by 4 neighbor buildings to maximize upgrade chance
+  city.grid[5][5] = TILES.BUILDING;
+  city.tier[5][5] = 1;
+  city.health[5][5] = 1.0;
+
+  city.grid[4][5] = TILES.BUILDING;
+  city.grid[6][5] = TILES.BUILDING;
+  city.grid[5][4] = TILES.BUILDING;
+  city.grid[5][6] = TILES.BUILDING;
+
+  assert.equal(city.getBuildingTier(5, 5), 1);
+  assert.equal(city.health[5][5], 1.0);
+
+  // Run growth steps until tier upgrades to Lv2 and Lv3
+  let reachedTier2 = false;
+  let reachedTier3 = false;
+
+  for (let i = 0; i < 40; i++) {
+    city.stepGrowth({ x: 0, y: 0 });
+    const currentTier = city.getBuildingTier(5, 5);
+    if (currentTier >= 2) reachedTier2 = true;
+    if (currentTier === 3) {
+      reachedTier3 = true;
+      break;
+    }
+  }
+
+  assert.equal(reachedTier2, true, 'Building should upgrade to Tier 2 in dense cluster');
+  assert.equal(reachedTier3, true, 'Building should eventually upgrade to Tier 3 in dense cluster');
+  assert.equal(city.health[5][5], 3.0, 'Tier 3 building must scale to 3.0 max health');
+  assert.ok(city.getBuildingTier(5, 5) <= 3, 'Building tier must not exceed max tier 3');
+});
+
+test('City: destroying high-tier buildings passes destroyedTier and resets tier to 1', () => {
+  const city = new City(10, 10);
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) city.grid[r][c] = TILES.ROAD;
+  }
+
+  city.grid[2][2] = TILES.BUILDING;
+  city.tier[2][2] = 3;
+  city.health[2][2] = 0.05; // Low health to trigger burn down
+  city.fireTimer[2][2] = 2.0;
+
+  let reportedTier = 0;
+  city.update(0.5, { x: 9, y: 9 }, (bx, by, destroyedTier) => {
+    if (bx === 2 && by === 2) {
+      reportedTier = destroyedTier;
+    }
+  });
+
+  assert.equal(reportedTier, 3, 'onBuildingDestroyed callback must receive correct destroyedTier (3)');
+  assert.equal(city.grid[2][2], TILES.ASH, 'Burned building must turn into ASH');
+  assert.equal(city.tier[2][2], 1, 'Tier must reset to 1 on ash tile');
+});
+

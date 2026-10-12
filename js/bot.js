@@ -11,6 +11,8 @@ export class BotAgent {
     this.currentMacroHotspot = null;
     this.escapeTimer = 0;
     this.escapeDir = null;
+    this.lastTile = null;
+    this.stuckTimer = 0;
   }
 
   reset() {
@@ -21,6 +23,8 @@ export class BotAgent {
     this.currentMacroHotspot = null;
     this.escapeTimer = 0;
     this.escapeDir = null;
+    this.lastTile = null;
+    this.stuckTimer = 0;
   }
 
   computeInput(game, dt = 0.016) {
@@ -74,10 +78,18 @@ export class BotAgent {
     const pTile = player.getTile();
     const ratio = city.getBuildingRatio();
 
-    // 1. Macro Heatmap Hotspot Update (every 1.5 seconds)
+    // Track stationary camping time
+    if (this.lastTile && this.lastTile.x === pTile.x && this.lastTile.y === pTile.y) {
+      this.stuckTimer += dt;
+    } else {
+      this.stuckTimer = 0;
+      this.lastTile = { ...pTile };
+    }
+
+    // 1. Macro Heatmap Hotspot Update (every 1.2 seconds)
     this.macroTargetTimer -= dt;
     if (this.macroTargetTimer <= 0) {
-      this.macroTargetTimer = 1.5;
+      this.macroTargetTimer = 1.2;
       this.currentMacroHotspot = this.findMacroHotspot(city, pTile);
     }
 
@@ -193,8 +205,9 @@ export class BotAgent {
       }
     }
 
-    // 7. Dash & Stamina Management
-    if ((policeChase || policeCritical || this.escapeTimer > 0 || ratio > 0.72) && player.stamina > 20) {
+    // 7. Dash & Stamina Management (Sprint to extinguish high-density outbreaks before 90% threshold!)
+    const highDensitySprint = ratio > 0.50 && player.stamina > 25;
+    if ((policeChase || policeCritical || this.escapeTimer > 0 || ratio > 0.72 || highDensitySprint) && player.stamina > 20) {
       input.bHeld = true;
     }
 
@@ -204,7 +217,7 @@ export class BotAgent {
   // Divide map into 4x4 quadrants and locate the densest accessible sector
   findMacroHotspot(city, pTile) {
     const sectorSize = 5; // 20 / 4 = 5 tiles per sector
-    let maxDensity = -1;
+    let maxScore = -Infinity;
     let bestCenter = null;
 
     for (let sy = 0; sy < 4; sy++) {
@@ -224,12 +237,12 @@ export class BotAgent {
         }
 
         const density = total > 0 ? (buildings / total) : 0;
-        // Balance density with distance (don't walk to opposite edge if local is already dense)
         const distToPlayer = Math.hypot(centerX - pTile.x, centerY - pTile.y);
-        const score = density * 100 - distToPlayer * 2;
+        // Strongly prioritize high density sectors over distance to extinguish remote clusters
+        const score = density * 300 - distToPlayer * 1.5;
 
-        if (score > maxDensity && density >= 0.35) {
-          maxDensity = score;
+        if (score > maxScore && density >= 0.30) {
+          maxScore = score;
           bestCenter = { x: centerX, y: centerY, density };
         }
       }
@@ -368,7 +381,9 @@ export class BotAgent {
       if (cand.dx === 0 && cand.dy === 0) {
         if (city.fireTimer[ny][nx] > 0) continue;
         if (closestPolice && policeDist < 3.2) continue;
-        const stayScore = this.evaluateTile(game, nx, ny, closestPolice, ratio, macroHotspot) - 10;
+        // Dynamic anti-stuck penalty: discourage stationary camping in an expanding city
+        const stayPenalty = 20 + Math.min(200, this.stuckTimer * 150);
+        const stayScore = this.evaluateTile(game, nx, ny, closestPolice, ratio, macroHotspot) - stayPenalty;
         if (stayScore > bestScore) {
           bestScore = stayScore;
           bestCandidate = cand;
@@ -453,13 +468,20 @@ export class BotAgent {
       }
     }
 
-    // 6. Macro Heatmap Hotspot Gravity
+    // 6. Macro Heatmap Hotspot Gravity (Scale pull with city density to crush remote outbreaks!)
     if (macroHotspot && ratio > 0.28) {
       const distToHotspot = Math.hypot(macroHotspot.x - x, macroHotspot.y - y);
-      score += (20 - distToHotspot) * 8; // Steer toward the densest sector
+      const hotspotWeight = ratio > 0.45 ? 12 : 8;
+      score += (20 - distToHotspot) * hotspotWeight; // Steer toward the densest sector
     }
 
-    // 7. Center-seeking Gravity (avoid corner traps)
+    // 7. Soft Perimeter & Corner Apex Guidance
+    const isCorner = (x === 0 || x === city.cols - 1) && (y === 0 || y === city.rows - 1);
+    const isEdge = x === 0 || x === city.cols - 1 || y === 0 || y === city.rows - 1;
+    if (isCorner) score -= 350;
+    else if (isEdge) score -= 60;
+
+    // 8. Center-seeking Gravity (avoid corner traps)
     const distToCenterX = Math.abs(x - city.cols / 2);
     const distToCenterY = Math.abs(y - city.rows / 2);
     score -= (distToCenterX + distToCenterY) * 2.5;

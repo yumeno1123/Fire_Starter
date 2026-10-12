@@ -1,6 +1,6 @@
 // Constants and Configuration for Fire Starter
 
-export const APP_VERSION = 'v1.5.2';
+export const APP_VERSION = 'v1.6.0';
 export const GITHUB_REPO = 'yumeno1123/Fire_Starter';
 export const CURRENT_COMMIT_SHORT = '7ebb3c1';
 
@@ -279,4 +279,11 @@ export const DIFFICULTY_SETTINGS = {
 export const DIFFICULTY_KEYS = ['EASY', 'NORMAL', 'HARD'];
 
 export const BALANCE = DIFFICULTY_SETTINGS.NORMAL;
+
+export const BUILDING_MAX_TIER = 3;
+export const BUILDING_TIER_CONFIG = {
+  1: { name: '木造ビル (Lv1)', maxHp: 1.0, scoreMultiplier: 1.0, baseScore: 100 },
+  2: { name: '鉄骨ビル (Lv2)', maxHp: 2.0, scoreMultiplier: 2.0, baseScore: 200 },
+  3: { name: '要塞ビル (Lv3)', maxHp: 3.0, scoreMultiplier: 3.0, baseScore: 300 }
+};
 
