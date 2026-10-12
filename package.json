@@ -1,6 +1,6 @@
 {
   "name": "flcl-fire-starter",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "FLCL Fire Starter Mobile Web Game PWA",
   "main": "js/main.js",
   "type": "module",

@@ -7,6 +7,12 @@ export function evaluateVersionStatus(remoteInput, localVersion = APP_VERSION, l
     return { status: 'UNKNOWN', label: '', isLatest: false };
   }
 
+  // Flexible argument handling: if 2nd arg looks like a git sha (7-40 hex chars)
+  if (typeof localVersion === 'string' && /^[0-9a-f]{7,40}$/i.test(localVersion) && localSha === CURRENT_COMMIT_SHORT) {
+    localSha = localVersion;
+    localVersion = APP_VERSION;
+  }
+
   const remoteSha = (typeof remoteInput === 'string') ? remoteInput : (remoteInput.sha || '');
   const remoteMsg = (typeof remoteInput === 'object') ? (remoteInput.message || '') : '';
 

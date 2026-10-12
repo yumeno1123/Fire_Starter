@@ -98,3 +98,21 @@ test('BotAgent: generates movement away from nearby police', () => {
   assert.equal(input.up, true, 'Bot should flee upward from approaching police below');
   assert.equal(input.down, false, 'Bot must not move toward police');
 });
+
+test('BotAgent: seals TIME_BOMB to prevent suicidal self-trapping explosions', () => {
+  const canvas = createMockCanvas();
+  const game = new Game(canvas);
+  game.update(0.1, { startJustPressed: true });
+  const bot = new BotAgent();
+
+  // Force player to have TIME_BOMB selected
+  while (game.player.getSelectedItem().id !== 'TIME_BOMB') {
+    game.player.cycleItem();
+  }
+  assert.equal(game.player.getSelectedItem().id, 'TIME_BOMB');
+
+  const input = bot.computeInput(game);
+  // Bot should cycle weapon (bJustPressed: true) and NEVER ignite TIME_BOMB (aJustPressed: false)
+  assert.equal(input.aJustPressed, false, 'Bot must never detonate TIME_BOMB');
+  assert.equal(input.bJustPressed, true, 'Bot must cycle away from TIME_BOMB');
+});

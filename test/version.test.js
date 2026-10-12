@@ -10,13 +10,13 @@ test('Version: constants are properly defined', () => {
 
 test('Version: evaluateVersionStatus detects exact and prefix matches as LATEST', () => {
   // Full sha starting with local prefix
-  const result = evaluateVersionStatus('a0b1b14ea3d2087b0e7ae6862870006b26af3a33', 'a0b1b14');
+  const result = evaluateVersionStatus('a0b1b14ea3d2087b0e7ae6862870006b26af3a33', 'v1.5.2', 'a0b1b14');
   assert.equal(result.isLatest, true);
   assert.equal(result.status, 'LATEST');
   assert.equal(result.label, 'LATEST');
 
   // Exact 7-char match
-  const exact = evaluateVersionStatus('a0b1b14', 'a0b1b14');
+  const exact = evaluateVersionStatus('a0b1b14', 'v1.5.2', 'a0b1b14');
   assert.equal(exact.isLatest, true);
   assert.equal(exact.status, 'LATEST');
 });

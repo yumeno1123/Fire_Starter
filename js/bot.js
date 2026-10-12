@@ -1,44 +1,29 @@
-// Autonomous Bot Agent for Fire Starter (Rule-Based Heuristic AI)
+// Autonomous Bot Agent for Fire Starter (Grandmaster AI - Macro Heatmap, BFS Lookahead & Ammo Supply)
 
-import { TILES, GAME_STATES } from './constants.js';
+import { TILES, GAME_STATES, ITEM_LIST } from './constants.js';
 
 export class BotAgent {
   constructor() {
     this.decisionTimer = 0;
-    this.currentAction = {
-      up: false,
-      down: false,
-      left: false,
-      right: false,
-      aJustPressed: false,
-      bJustPressed: false,
-      bHeld: false,
-      startJustPressed: false,
-      selectJustPressed: false
-    };
-    this.targetTile = null;
-    this.actionCooldown = 0;
+    this.fireCooldown = 0;
+    this.bombCooldown = 0;
+    this.macroTargetTimer = 0;
+    this.currentMacroHotspot = null;
+    this.escapeTimer = 0;
+    this.escapeDir = null;
   }
 
   reset() {
     this.decisionTimer = 0;
-    this.targetTile = null;
-    this.actionCooldown = 0;
-    this.currentAction = {
-      up: false,
-      down: false,
-      left: false,
-      right: false,
-      aJustPressed: false,
-      bJustPressed: false,
-      bHeld: false,
-      startJustPressed: false,
-      selectJustPressed: false
-    };
+    this.fireCooldown = 0;
+    this.bombCooldown = 0;
+    this.macroTargetTimer = 0;
+    this.currentMacroHotspot = null;
+    this.escapeTimer = 0;
+    this.escapeDir = null;
   }
 
   computeInput(game, dt = 0.016) {
-    // Fresh input object
     const input = {
       up: false,
       down: false,
@@ -53,7 +38,7 @@ export class BotAgent {
 
     if (!game) return input;
 
-    // Handle Title Screen & Menus: Auto Start
+    // Handle Title Screen: Auto Start
     if (game.state === GAME_STATES.TITLE) {
       input.startJustPressed = true;
       return input;
@@ -83,15 +68,24 @@ export class BotAgent {
     const player = game.player;
     if (!city || !player) return input;
 
+    if (this.fireCooldown > 0) this.fireCooldown -= dt;
+    if (this.bombCooldown > 0) this.bombCooldown -= dt;
+
     const pTile = player.getTile();
     const ratio = city.getBuildingRatio();
 
-    // Active threats
+    // 1. Macro Heatmap Hotspot Update (every 1.5 seconds)
+    this.macroTargetTimer -= dt;
+    if (this.macroTargetTimer <= 0) {
+      this.macroTargetTimer = 1.5;
+      this.currentMacroHotspot = this.findMacroHotspot(city, pTile);
+    }
+
+    // 2. Police Threat Analysis
     const activePolice = (game.policeUnits || []).filter(
       p => p.state !== 'DESPAWNED' && p.state !== 'RETREAT' && p.stunTimer <= 0
     );
 
-    // 1. Threat Assessment: Police Proximity
     let closestPolice = null;
     let minPoliceDist = Infinity;
     for (const police of activePolice) {
@@ -102,83 +96,266 @@ export class BotAgent {
       }
     }
 
-    const underImmediateThreat = closestPolice !== null && minPoliceDist < 4.5;
-    const inMeleeDanger = closestPolice !== null && minPoliceDist < 2.0;
+    const policeChase = closestPolice !== null && closestPolice.state === 'CHASE';
+    const policeNear = closestPolice !== null && minPoliceDist < 4.2;
+    const policeCritical = closestPolice !== null && minPoliceDist < 2.0;
 
-    // 2. Weapon Selection & Defense Action
+    // 3. Escape Routes & Open Space Evaluation
+    const safeExits = this.getSafeExits(city, pTile.x, pTile.y);
+    // 4. Smart Weapon Selection (Supply Chain Aware)
+    // NOTE: TIME_BOMB detonates into a 5x5 fire explosion (burn duration 6.0s) that cuts off roads
+    // and causes fatal self-trapping. The Grandmaster AI strictly seals TIME_BOMB, focusing on
+    // high-mobility, agile weapons: Zippo Lighter, Molotov, and Match.
     const currentItem = player.getSelectedItem();
-    if (inMeleeDanger) {
-      // If we have bomb or molotov, equip and fire to stun police!
-      if (currentItem.id !== 'TIME_BOMB' && currentItem.id !== 'MOLOTOV') {
-        if (player.ammo.TIME_BOMB > 0 || player.ammo.MOLOTOV > 0) {
-          input.bJustPressed = true;
+    let desiredWeapon = 'MATCH';
+
+    if (policeCritical && player.ammo.MOLOTOV > 0) {
+      desiredWeapon = 'MOLOTOV';
+    } else if (player.ammo.LIGHTER > 0 && ratio > 0.16) {
+      // Primary weapon: Zippo Lighter (high efficiency, fast burn)
+      desiredWeapon = 'LIGHTER';
+    } else if (player.ammo.MOLOTOV > 0 && ratio > 0.35) {
+      // Secondary weapon: Molotov for ranged cluster demolition
+      desiredWeapon = 'MOLOTOV';
+    } else if (player.ammo.MATCH > 0) {
+      desiredWeapon = 'MATCH';
+    } else {
+      // Cycle to any available agile ammunition (excluding suicidal TIME_BOMB)
+      for (const item of ITEM_LIST) {
+        if (item.id !== 'TIME_BOMB' && player.ammo[item.id] > 0) {
+          desiredWeapon = item.id;
+          break;
         }
-      } else if (player.ammo[currentItem.id] > 0) {
-        input.aJustPressed = true; // Blast the approaching police
       }
     }
 
-    // 3. Fire / Igniting Decision (Controlled Burning)
-    // - Under 14% ratio: Strictly forbidden! We are close to full-burn defeat.
-    // - 14% - 38% (Tension Zone): Highly lucrative border bonus (+30/sec). Fire sparingly, only to open blocked paths.
-    // - Over 38%: Actively burn to prevent crushing.
-    let shouldBurn = false;
-    const facingTile = player.getFacingTile();
-
-    if (ratio > 0.38) {
-      // Overcrowded city -> Burn nearby buildings
-      if (city.isValid(facingTile.x, facingTile.y) && city.isFlammable(facingTile.x, facingTile.y)) {
-        shouldBurn = true;
-      }
-    } else if (ratio >= 0.14 && ratio <= 0.38) {
-      // In Tension Zone -> Only burn if directly trapped or facing dead-end
-      const trapped = !this.hasWalkableNeighbor(city, pTile.x, pTile.y);
-      if (trapped && city.isValid(facingTile.x, facingTile.y) && city.isFlammable(facingTile.x, facingTile.y)) {
-        shouldBurn = true;
-      }
+    // Cycle inventory toward desired weapon
+    if (currentItem.id !== desiredWeapon && !player.dashing) {
+      input.bJustPressed = true;
     }
 
-    if (shouldBurn && !inMeleeDanger) {
-      // Check ammo
-      if (player.ammo[currentItem.id] <= 0) {
-        input.bJustPressed = true; // Cycle to available item
+    // 5. Active Strategic Ignition
+    // Full-burn guard: Never ignite when city is under 13% ratio
+    const allowBurning = ratio >= 0.13 && safeExits.length >= 2;
+    let turnToTarget = null;
+
+    if (allowBurning && this.fireCooldown <= 0) {
+      // Cycle away immediately if TIME_BOMB is held; never detonate
+      if (currentItem.id === 'TIME_BOMB') {
+        input.bJustPressed = true;
+      } else if (currentItem.id === 'MOLOTOV' && player.ammo.MOLOTOV > 0) {
+        const molotovTarget = this.findSafeMolotovTarget(city, pTile);
+        if (molotovTarget) {
+          turnToTarget = molotovTarget;
+          input.aJustPressed = true;
+          this.fireCooldown = 0.40;
+        }
       } else {
-        input.aJustPressed = true;
+        // Direct Ignition: Match or Zippo
+        const adjacent = this.findAdjacentFlammable(city, pTile);
+        if (adjacent) {
+          const comboExpiring = game.comboCount > 0 && game.comboTimer < 1.8;
+          const shouldBurn = ratio > 0.20 || comboExpiring || policeNear;
+
+          if (shouldBurn) {
+            turnToTarget = adjacent.dir;
+            input.aJustPressed = true;
+            this.fireCooldown = 0.13; // Highly responsive rapid-fire
+          }
+        }
       }
     }
 
-    // 4. Directional Navigation & Potential Field Evaluation
-    const bestMove = this.chooseBestDirection(game, pTile, closestPolice, minPoliceDist, ratio);
+    // 6. Intelligent Navigation (BFS Lookahead + Macro Heatmap + Item Drone)
+    if (this.escapeTimer > 0 && this.escapeDir) {
+      this.escapeTimer -= dt;
+      input.bHeld = true; // Sprint away from bomb
+      if (this.escapeDir.dx < 0) input.left = true;
+      else if (this.escapeDir.dx > 0) input.right = true;
+      if (this.escapeDir.dy < 0) input.up = true;
+      else if (this.escapeDir.dy > 0) input.down = true;
+    } else {
+      const bestMove = this.chooseBestDirection(
+        game,
+        pTile,
+        closestPolice,
+        minPoliceDist,
+        ratio,
+        turnToTarget,
+        this.currentMacroHotspot
+      );
 
-    if (bestMove) {
-      if (bestMove.dx < 0) input.left = true;
-      else if (bestMove.dx > 0) input.right = true;
-
-      if (bestMove.dy < 0) input.up = true;
-      else if (bestMove.dy > 0) input.down = true;
+      if (bestMove) {
+        if (bestMove.dx < 0) input.left = true;
+        else if (bestMove.dx > 0) input.right = true;
+        if (bestMove.dy < 0) input.up = true;
+        else if (bestMove.dy > 0) input.down = true;
+      }
     }
 
-    // 5. Dash Decision
-    if (underImmediateThreat && player.stamina > 30) {
-      input.bHeld = true; // Dash away from police!
+    // 7. Dash & Stamina Management
+    if ((policeChase || policeCritical || this.escapeTimer > 0 || ratio > 0.72) && player.stamina > 20) {
+      input.bHeld = true;
     }
 
     return input;
   }
 
-  hasWalkableNeighbor(city, x, y) {
-    const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-    return dirs.some(([dx, dy]) => city.isWalkable(x + dx, y + dy));
+  // Divide map into 4x4 quadrants and locate the densest accessible sector
+  findMacroHotspot(city, pTile) {
+    const sectorSize = 5; // 20 / 4 = 5 tiles per sector
+    let maxDensity = -1;
+    let bestCenter = null;
+
+    for (let sy = 0; sy < 4; sy++) {
+      for (let sx = 0; sx < 4; sx++) {
+        let buildings = 0;
+        let total = 0;
+        const centerX = sx * sectorSize + Math.floor(sectorSize / 2);
+        const centerY = sy * sectorSize + Math.floor(sectorSize / 2);
+
+        for (let r = sy * sectorSize; r < (sy + 1) * sectorSize; r++) {
+          for (let c = sx * sectorSize; c < (sx + 1) * sectorSize; c++) {
+            if (city.isValid(c, r)) {
+              total++;
+              if (city.grid[r][c] === TILES.BUILDING) buildings++;
+            }
+          }
+        }
+
+        const density = total > 0 ? (buildings / total) : 0;
+        // Balance density with distance (don't walk to opposite edge if local is already dense)
+        const distToPlayer = Math.hypot(centerX - pTile.x, centerY - pTile.y);
+        const score = density * 100 - distToPlayer * 2;
+
+        if (score > maxDensity && density >= 0.35) {
+          maxDensity = score;
+          bestCenter = { x: centerX, y: centerY, density };
+        }
+      }
+    }
+
+    return bestCenter;
   }
 
-  chooseBestDirection(game, pTile, closestPolice, policeDist, ratio) {
+  // BFS Reachability Depth: Count accessible unburned tiles reachable from (startX, startY)
+  evaluateEscapeBreadth(city, startX, startY, maxDepth = 15) {
+    if (!city.isValid(startX, startY) || !city.isWalkable(startX, startY) || city.fireTimer[startY][startX] > 0) {
+      return 0;
+    }
+
+    const queue = [[startX, startY, 0]];
+    const visited = new Set([`${startX},${startY}`]);
+    let reachableCount = 0;
+    const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+
+    while (queue.length > 0 && reachableCount < maxDepth) {
+      const [cx, cy, d] = queue.shift();
+      reachableCount++;
+
+      for (const [dx, dy] of dirs) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        const key = `${nx},${ny}`;
+        if (city.isValid(nx, ny) && !visited.has(key)) {
+          visited.add(key);
+          if (city.isWalkable(nx, ny) && city.fireTimer[ny][nx] <= 0) {
+            queue.push([nx, ny, d + 1]);
+          }
+        }
+      }
+    }
+
+    return reachableCount;
+  }
+
+  getSafeExits(city, x, y) {
+    const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+    const safe = [];
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (city.isValid(nx, ny) && city.isWalkable(nx, ny) && city.fireTimer[ny][nx] <= 0) {
+        safe.push({ x: nx, y: ny, dx, dy });
+      }
+    }
+    return safe;
+  }
+
+  findLongEscapeRoute(city, x, y, minSteps = 4) {
+    const dirs = [
+      { dx: 0, dy: -1 },
+      { dx: 0, dy: 1 },
+      { dx: -1, dy: 0 },
+      { dx: 1, dy: 0 }
+    ];
+
+    for (const d of dirs) {
+      let isClear = true;
+      for (let s = 1; s <= minSteps; s++) {
+        const nx = x + d.dx * s;
+        const ny = y + d.dy * s;
+        if (!city.isValid(nx, ny) || !city.isWalkable(nx, ny) || city.fireTimer[ny][nx] > 0) {
+          isClear = false;
+          break;
+        }
+      }
+      if (isClear) return d;
+    }
+    return null;
+  }
+
+  findAdjacentFlammable(city, pTile) {
+    const dirs = [
+      { name: 'UP', dx: 0, dy: -1 },
+      { name: 'DOWN', dx: 0, dy: 1 },
+      { name: 'LEFT', dx: -1, dy: 0 },
+      { name: 'RIGHT', dx: 1, dy: 0 }
+    ];
+
+    for (const d of dirs) {
+      const nx = pTile.x + d.dx;
+      const ny = pTile.y + d.dy;
+      if (city.isValid(nx, ny) && city.isFlammable(nx, ny) && city.fireTimer[ny][nx] <= 0) {
+        return { dir: d.name, x: nx, y: ny };
+      }
+    }
+    return null;
+  }
+
+  findSafeMolotovTarget(city, pTile) {
+    const dirs = [
+      { name: 'UP', dx: 0, dy: -3, checkDx: 0, checkDy: -1 },
+      { name: 'DOWN', dx: 0, dy: 3, checkDx: 0, checkDy: 1 },
+      { name: 'LEFT', dx: -3, dy: 0, checkDx: -1, checkDy: 0 },
+      { name: 'RIGHT', dx: 3, dy: 0, checkDx: 1, checkDy: 0 }
+    ];
+
+    for (const d of dirs) {
+      const tx = pTile.x + d.dx;
+      const ty = pTile.y + d.dy;
+      const nearX = pTile.x + d.checkDx;
+      const nearY = pTile.y + d.checkDy;
+
+      if (city.isValid(tx, ty) && city.isValid(nearX, nearY)) {
+        if (city.fireTimer[nearY][nearX] <= 0) {
+          if (city.isFlammable(tx, ty)) {
+            return d.name;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  chooseBestDirection(game, pTile, closestPolice, policeDist, ratio, turnToTarget, macroHotspot) {
     const city = game.city;
     const candidates = [
-      { dx: 0, dy: -1 }, // UP
-      { dx: 0, dy: 1 },  // DOWN
-      { dx: -1, dy: 0 }, // LEFT
-      { dx: 1, dy: 0 },  // RIGHT
-      { dx: 0, dy: 0 }   // STAY
+      { dx: 0, dy: -1, name: 'UP' },
+      { dx: 0, dy: 1, name: 'DOWN' },
+      { dx: -1, dy: 0, name: 'LEFT' },
+      { dx: 1, dy: 0, name: 'RIGHT' },
+      { dx: 0, dy: 0, name: 'STAY' }
     ];
 
     let bestScore = -Infinity;
@@ -188,10 +365,10 @@ export class BotAgent {
       const nx = pTile.x + cand.dx;
       const ny = pTile.y + cand.dy;
 
-      // Stay is only allowed if no police is nearby
       if (cand.dx === 0 && cand.dy === 0) {
-        if (closestPolice && policeDist < 3.5) continue;
-        const stayScore = this.evaluateTile(game, nx, ny, closestPolice, ratio) - 5;
+        if (city.fireTimer[ny][nx] > 0) continue;
+        if (closestPolice && policeDist < 3.2) continue;
+        const stayScore = this.evaluateTile(game, nx, ny, closestPolice, ratio, macroHotspot) - 10;
         if (stayScore > bestScore) {
           bestScore = stayScore;
           bestCandidate = cand;
@@ -199,12 +376,16 @@ export class BotAgent {
         continue;
       }
 
-      // Check walkability and active fire
       if (!city.isValid(nx, ny)) continue;
       if (!city.isWalkable(nx, ny)) continue;
-      if (city.fireTimer[ny][nx] > 0) continue; // NEVER walk into active fire
+      if (city.fireTimer[ny][nx] > 0) continue; // NEVER step into active fire!
 
-      const score = this.evaluateTile(game, nx, ny, closestPolice, ratio);
+      let score = this.evaluateTile(game, nx, ny, closestPolice, ratio, macroHotspot);
+
+      if (turnToTarget && cand.name === turnToTarget) {
+        score += 30;
+      }
+
       if (score > bestScore) {
         bestScore = score;
         bestCandidate = cand;
@@ -214,65 +395,74 @@ export class BotAgent {
     return bestCandidate;
   }
 
-  evaluateTile(game, x, y, closestPolice, ratio) {
+  evaluateTile(game, x, y, closestPolice, ratio, macroHotspot) {
     const city = game.city;
+    const player = game.player;
     let score = 100;
 
-    // 1. Repulsion from Police
+    // 1. Strong Repulsion from Police (huge threat)
     if (closestPolice) {
       const dist = Math.hypot(closestPolice.x - x, closestPolice.y - y);
-      if (dist < 1.5) score -= 600; // Critical danger
-      else if (dist < 3.0) score -= 300;
-      else if (dist < 5.0) score -= 100;
-      else score += dist * 15; // Reward distancing
+      if (dist < 1.5) score -= 1400; // Critical death threat
+      else if (dist < 3.0) score -= 700;
+      else if (dist < 5.0) score -= 250;
+      else score += dist * 40;
     }
 
-    // 2. Repulsion from Active Fire Neighbors
+    // 2. BFS Escape Breadth (Eliminate U-turn cul-de-sacs!)
+    const reachableBreadth = this.evaluateEscapeBreadth(city, x, y, 12);
+    if (reachableBreadth <= 2) score -= 900; // Complete death trap
+    else if (reachableBreadth <= 5) score -= 400; // Shallow pocket
+    else score += reachableBreadth * 30; // Strongly favor broad road networks
+
+    // 3. Immediate Adjacent Safe Exits & Flame Avoidance
     const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
     let adjacentFires = 0;
-    let openExits = 0;
+    let adjacentFlammableBuildings = 0;
 
     for (const [dx, dy] of dirs) {
       const nx = x + dx;
       const ny = y + dy;
       if (city.isValid(nx, ny)) {
         if (city.fireTimer[ny][nx] > 0) adjacentFires++;
-        if (city.isWalkable(nx, ny) && city.fireTimer[ny][nx] <= 0) openExits++;
+        if (city.isFlammable(nx, ny) && city.fireTimer[ny][nx] <= 0) adjacentFlammableBuildings++;
       }
     }
 
-    score -= adjacentFires * 40; // Penalty for staying adjacent to blaze
-    score += openExits * 20;     // Prefer open intersections over dead ends
+    score -= adjacentFires * 90; // Heavy penalty for standing directly in flame heat
 
-    // 3. Attraction to Items
+    // 4. Proximity to Flammable Targets
+    if (ratio > 0.18) {
+      score += adjacentFlammableBuildings * 35;
+    }
+
+    // 5. Ammo Supply Chain (Drone Attraction to Dropped Items)
     if (city.items && city.items.length > 0) {
       let closestItemDist = Infinity;
       for (const item of city.items) {
         const d = Math.abs(item.x - x) + Math.abs(item.y - y);
         if (d < closestItemDist) closestItemDist = d;
       }
-      if (closestItemDist <= 5) {
-        score += (6 - closestItemDist) * 15;
+
+      // If ammo is low (under 8 rounds), skyrocket item attraction!
+      const totalAmmo = (player.ammo.MATCH || 0) + (player.ammo.LIGHTER || 0);
+      const urgency = totalAmmo < 8 ? 70 : 35;
+
+      if (closestItemDist <= 8) {
+        score += (9 - closestItemDist) * urgency;
       }
     }
 
-    // 4. Center Gravity (avoid map edges where one can get trapped)
+    // 6. Macro Heatmap Hotspot Gravity
+    if (macroHotspot && ratio > 0.28) {
+      const distToHotspot = Math.hypot(macroHotspot.x - x, macroHotspot.y - y);
+      score += (20 - distToHotspot) * 8; // Steer toward the densest sector
+    }
+
+    // 7. Center-seeking Gravity (avoid corner traps)
     const distToCenterX = Math.abs(x - city.cols / 2);
     const distToCenterY = Math.abs(y - city.rows / 2);
-    score -= (distToCenterX + distToCenterY) * 2;
-
-    // 5. Fire Targeting (if overcrowded, steer towards combustible blocks)
-    if (ratio > 0.45) {
-      let combustibleNeighbors = 0;
-      for (const [dx, dy] of dirs) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (city.isValid(nx, ny) && city.isFlammable(nx, ny)) {
-          combustibleNeighbors++;
-        }
-      }
-      score += combustibleNeighbors * 25;
-    }
+    score -= (distToCenterX + distToCenterY) * 2.5;
 
     return score;
   }
