@@ -210,57 +210,31 @@ export class GameState {
   }
 
   /**
-   * Generates a 28x18 layout with EXACTLY:
-   * - 64 RIVER cells
-   * - 120 ROAD cells
-   * - 320 LOT (buildable) cells
+   * Generates a 28x18 city grid layout without any river barrier in the middle.
+   * Row 0 is behind the top HUD bar; rows 1..17 are freely walkable streets (ROAD) and city blocks (LOT).
    */
   private createExactTerrainLayout(cols: number, rows: number): TerrainType[][] {
     const grid: TerrainType[][] = Array.from({ length: rows }, () =>
       Array.from({ length: cols }, () => 'LOT' as TerrainType),
     );
 
-    const bridgeCols = new Set([7, 8, 19, 20]);
-    for (let y = 8; y <= 9; y++) {
-      for (let x = 0; x < cols; x++) {
-        if (bridgeCols.has(x)) continue;
-        grid[y][x] = 'RIVER';
-      }
-    }
-
-    for (let x = 0; x < 8; x++) {
-      grid[0][x] = 'RIVER';
-      grid[0][cols - 1 - x] = 'RIVER';
-    }
-
-    let roadCount = 0;
     const setRoad = (x: number, y: number): void => {
       if (x < 0 || x >= cols || y < 0 || y >= rows) return;
-      if (grid[y][x] !== 'LOT') return;
-      if (roadCount >= 120) return;
       grid[y][x] = 'ROAD';
-      roadCount++;
     };
 
-    for (const bx of bridgeCols) {
-      setRoad(bx, 8);
-      setRoad(bx, 9);
-    }
-
+    // Horizontal streets at y = 4, 9, 14
     for (let x = 0; x < cols; x++) {
       setRoad(x, 4);
-      setRoad(x, 13);
+      setRoad(x, 9);
+      setRoad(x, 14);
     }
 
-    for (let y = 1; y < rows - 1; y++) {
-      setRoad(7, y);
+    // Vertical avenues at x = 6, 14, 21
+    for (let y = 1; y < rows; y++) {
+      setRoad(6, y);
       setRoad(14, y);
-      setRoad(20, y);
-    }
-
-    for (let x = 2; x < cols - 2; x++) {
-      setRoad(x, 16);
-      setRoad(x, 1);
+      setRoad(21, y);
     }
 
     return grid;
@@ -379,7 +353,7 @@ export class GameState {
     this.firefighters = [];
 
     const shuffled = [...this.buildableCells].sort(() => Math.random() - 0.5);
-    const targetAshCount = Math.floor(CONFIG.TOTAL_BUILDABLE_CELLS * 0.5);
+    const targetAshCount = Math.floor(this.buildableCells.length * 0.5);
 
     for (let i = 0; i < shuffled.length; i++) {
       const cell = shuffled[i];
@@ -1013,24 +987,8 @@ export class GameState {
     dt: number,
     avoidFire: boolean,
   ): void {
-    let goalX = targetX;
-    let goalY = targetY;
-
-    const actorAboveRiver = actor.y < 8.0;
-    const actorBelowRiver = actor.y > 10.0;
-    const targetAboveRiver = targetY < 8.0;
-    const targetBelowRiver = targetY > 10.0;
-
-    if ((actorAboveRiver && targetBelowRiver) || (actorBelowRiver && targetAboveRiver)) {
-      const bridgeX = Math.abs(actor.x - 8.0) < Math.abs(actor.x - 20.0) ? 8.0 : 20.0;
-      if (Math.abs(actor.x - bridgeX) > 0.9) {
-        goalX = bridgeX;
-        goalY = actorAboveRiver ? 7.5 : 10.5;
-      }
-    }
-
-    const dx = goalX - actor.x;
-    const dy = goalY - actor.y;
+    const dx = targetX - actor.x;
+    const dy = targetY - actor.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 0.05) return;
 
@@ -1105,6 +1063,7 @@ export class GameState {
     let weightedBuildings = 0;
     let burningCount = 0;
     let ashCount = 0;
+    const totalBuildable = Math.max(1, this.buildableCells.length);
 
     for (const cell of this.buildableCells) {
       if (cell.state === 'BUILDING_1') {
@@ -1122,7 +1081,7 @@ export class GameState {
 
     let deltaSuffocationPerSec =
       CONFIG.GAUGE.SUFFOCATION_BASE_RATE +
-      (weightedBuildings / CONFIG.TOTAL_BUILDABLE_CELLS) *
+      (weightedBuildings / totalBuildable) *
         CONFIG.GAUGE.SUFFOCATION_BUILDING_FACTOR -
       burningCount * CONFIG.GAUGE.SUFFOCATION_BURNING_RELIEF;
 
@@ -1139,10 +1098,7 @@ export class GameState {
 
     this.destruction = Math.max(
       0,
-      Math.min(
-        100,
-        ((burningCount + ashCount) / CONFIG.TOTAL_BUILDABLE_CELLS) * 100,
-      ),
+      Math.min(100, ((burningCount + ashCount) / totalBuildable) * 100),
     );
 
     if (this.destruction >= 100) {

@@ -103,11 +103,6 @@ export class Renderer {
       if ((cell.x + cell.y) % 2 === 0) {
         this.ctx.fillRect(px + 3, py + 3, 2, 2);
       }
-      if (cell.y === 8 || cell.y === 9) {
-        this.ctx.fillStyle = COLOR_2;
-        this.ctx.fillRect(px, py, 1, 8);
-        this.ctx.fillRect(px + 7, py, 1, 8);
-      }
       return;
     }
 

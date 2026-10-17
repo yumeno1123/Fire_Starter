@@ -2,6 +2,16 @@
 
 All notable changes to the **FIRE STARTER** project are documented in this file.
 
+## [1.0.2] - 2026-10-17
+
+### Changed
+- **マップ中央の川を撤去 (`src/state.ts`, `src/renderer.ts`)**:
+  - 画面中央（`y = 8..9`）を横断していた川を撤去し、画面全体を遮るものなく自由に移動できる街区・幹線道路レイアウトへ変更。
+- **フッター字幕2行表示時のUIズレ防止 (`index.html`)**:
+  - 下部の現実侵食字幕領域（`.reality-erosion-area` および `#reality-subtitle`）を完全固定高さ（`72px` / `46px`）に設定し、セリフが2行になった際もゲーム機本体やボタン位置が1pxもズレないよう修正。
+- **移動キー（十字キー）の拡大 (`index.html`)**:
+  - 十字キー全体のサイズを `112px` → `148px`、各方向ボタン（▲▼◀▶）を `36px` → `50px` へ拡大し、PC・スマホともに押しやすく改善。
+
 ## [1.0.1] - 2026-10-17
 
 ### Changed
