@@ -1,121 +1,622 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="theme-color" content="#081820">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="アニメ『フリクリ』作中携帯ゲーム『Fire Starter』Webアプリ版。黒き炎の神カンティードの僕となり、増殖する街エンズビルを焼き払え。">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>FIRE STARTER | ファイヤースターター</title>
+    <style>
+      :root {
+        --bg-dusk-top: #1c1311;
+        --bg-dusk-mid: #121013;
+        --bg-dusk-bot: #090b0f;
+        --casing-body: #232629;
+        --casing-edge: #383c42;
+        --casing-shadow: #111315;
+        --lcd-bg: #8b956d;
+        --lcd-dark: #1b1e12;
+        --accent-ember: #b84a27;
+      }
 
-  <title>FIRE STARTER - フリクリ</title>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+      }
 
-  <!-- PWA Manifest & Favicon -->
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" type="image/png" href="./assets/favicon.png">
-  <link rel="apple-touch-icon" href="./assets/icon-192.png">
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        touch-action: none;
+        background: linear-gradient(
+          180deg,
+          var(--bg-dusk-top) 0%,
+          var(--bg-dusk-mid) 52%,
+          var(--bg-dusk-bot) 100%
+        );
+        color: #d6cfc7;
+        font-family: 'Yu Mincho', 'Hiragino Mincho ProN', 'MS PMincho', serif;
+      }
 
-  <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-  <div id="app-container">
-    <div id="device-body">
-      <!-- Upper Section: Screen Bezel & LCD -->
-      <div id="bezel-container">
-        <div id="bezel-header">
-          <div id="battery-indicator">
-            <span class="battery-led"></span>
-            <span class="battery-label">BATTERY</span>
-          </div>
-          <button id="btn-auto" class="auto-indicator" aria-label="Auto play toggle" title="オートプレイ切替 [P]">
-            <span class="auto-led"></span>
-            <span class="auto-label">AUTO</span>
-          </button>
-          <div id="bezel-title">DOT MATRIX WITH STEREO SOUND</div>
-        </div>
+      #reality-frame {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px 14px;
+        z-index: 1;
+      }
 
-        <div id="screen-frame">
-          <canvas id="game-screen" width="320" height="320"></canvas>
-          <div class="screen-scanlines"></div>
-        </div>
+      /* Police rotating red light overlay in the outer reality frame */
+      #police-strobe {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(
+          circle at 50% 35%,
+          rgba(255, 20, 20, 0.28),
+          rgba(180, 0, 0, 0.12) 60%,
+          transparent 90%
+        );
+        opacity: 0;
+        transition: opacity 0.12s ease;
+        z-index: 2;
+      }
 
-        <div id="bezel-footer">
-          <div class="brand-wrapper">
-            <span class="brand-text">CANTIDO <i>COMMUNICATION SYSTEM</i></span>
-          </div>
-          <div id="version-container">
-            <a id="version-link" href="https://github.com/yumeno1123/Fire_Starter" target="_blank" rel="noopener noreferrer" title="GitHubリポジトリを開く">
-              <span id="version-tag">v1.5.2</span>
-              <span id="version-sync-dot" class="sync-dot sync-checking"></span>
-              <span id="version-status-text">SYNCING...</span>
-            </a>
-          </div>
-        </div>
-      </div>
+      /* Top utility & reality bar */
+      .outer-top-bar {
+        width: 100%;
+        max-width: 780px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        z-index: 5;
+        font-family: monospace;
+        font-size: 11px;
+        color: #9e968e;
+      }
 
-      <!-- Lower Section: Retro Game Boy Style Controller -->
-      <div id="controls-container">
-        <!-- D-Pad (Left Side) -->
-        <div id="dpad-wrapper">
-          <div id="dpad">
-            <div class="dpad-cross">
-              <div class="dpad-btn dpad-up" data-dir="up">▲</div>
-              <div class="dpad-btn dpad-left" data-dir="left">◀</div>
+      .utility-btn {
+        background: rgba(24, 26, 29, 0.82);
+        border: 1px solid rgba(158, 150, 142, 0.3);
+        color: #c7bfb6;
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 11px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+      }
+
+      .utility-btn:hover {
+        background: rgba(45, 48, 54, 0.9);
+        border-color: rgba(210, 195, 180, 0.55);
+      }
+
+      /* Handheld Game Console Casing (WonderSwan-inspired) */
+      #handheld-casing {
+        position: relative;
+        width: 100%;
+        max-width: 760px;
+        background: linear-gradient(145deg, #2b2f33 0%, #1d2023 65%, #15171a 100%);
+        border: 2px solid var(--casing-edge);
+        border-radius: 26px 26px 36px 36px;
+        box-shadow:
+          0 22px 50px rgba(0, 0, 0, 0.85),
+          inset 0 2px 3px rgba(255, 255, 255, 0.08),
+          inset 0 -6px 14px rgba(0, 0, 0, 0.7);
+        padding: 16px 18px 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        z-index: 4;
+      }
+
+      .console-upper-deck {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 128px 1fr 128px;
+        align-items: center;
+        gap: 12px;
+      }
+
+      /* Screen Bezel & Reflective LCD Viewport */
+      .screen-bezel {
+        background: #141618;
+        border: 3px solid #0d0f10;
+        border-radius: 12px;
+        padding: 10px 12px 8px;
+        box-shadow:
+          inset 0 4px 10px rgba(0, 0, 0, 0.9),
+          0 1px 0 rgba(255, 255, 255, 0.07);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .bezel-header {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-family: monospace;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        color: #7c8275;
+      }
+
+      .power-led {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .led-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #913822;
+        box-shadow: 0 0 6px #cf4927;
+      }
+
+      .led-dot.critical {
+        background: #ff2a1a;
+        box-shadow: 0 0 10px #ff2a1a;
+      }
+
+      .lcd-glass-frame {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 224 / 144;
+        background: var(--lcd-bg);
+        border: 3px solid #2b3022;
+        border-radius: 4px;
+        overflow: hidden;
+        box-shadow: inset 0 3px 8px rgba(15, 18, 10, 0.45);
+      }
+
+      #lcd-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      /* Bezel Gauge Strip below LCD */
+      .bezel-gauges {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        font-family: monospace;
+        font-size: 10px;
+        color: #8c9484;
+      }
+
+      .gauge-box {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .gauge-label-row {
+        display: flex;
+        justify-content: space-between;
+      }
+
+      .gauge-track {
+        width: 100%;
+        height: 5px;
+        background: #23271e;
+        border: 1px solid #3c4232;
+        overflow: hidden;
+      }
+
+      .gauge-fill {
+        height: 100%;
+        background: #7d8762;
+        width: 40%;
+        transition: width 0.1s linear;
+      }
+
+      .gauge-fill.danger {
+        background: #b84a27;
+      }
+
+      /* Physical Controls (D-Pad & Action Buttons) */
+      .controls-wing {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+
+      .dpad-container {
+        position: relative;
+        width: 112px;
+        height: 112px;
+      }
+
+      .hw-btn {
+        background: linear-gradient(180deg, #35393e 0%, #24272b 100%);
+        border: 1px solid #4a4f57;
+        color: #b7bec7;
+        font-family: monospace;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow:
+          0 4px 0 #121417,
+          0 5px 8px rgba(0, 0, 0, 0.6);
+        transition: transform 0.04s ease, box-shadow 0.04s ease, background 0.08s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        touch-action: none;
+      }
+
+      .hw-btn.pressed,
+      .hw-btn:active {
+        transform: translateY(2px);
+        box-shadow:
+          0 1px 0 #121417,
+          0 2px 3px rgba(0, 0, 0, 0.5);
+        background: linear-gradient(180deg, #26292d 0%, #1c1e22 100%);
+        color: #ffffff;
+      }
+
+      .dpad-btn {
+        position: absolute;
+        width: 36px;
+        height: 36px;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+
+      .dpad-up {
+        top: 0;
+        left: 38px;
+      }
+      .dpad-down {
+        bottom: 0;
+        left: 38px;
+      }
+      .dpad-left {
+        top: 38px;
+        left: 0;
+      }
+      .dpad-right {
+        top: 38px;
+        right: 0;
+      }
+      .dpad-center {
+        position: absolute;
+        top: 38px;
+        left: 38px;
+        width: 36px;
+        height: 36px;
+        background: #222529;
+        border-radius: 4px;
+        pointer-events: none;
+      }
+
+      .action-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .action-btn {
+        width: 96px;
+        height: 40px;
+        border-radius: 20px;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        flex-direction: column;
+        line-height: 1.15;
+      }
+
+      .action-btn.fire-btn {
+        border-color: #6e3b2c;
+        background: linear-gradient(180deg, #422620 0%, #2b1814 100%);
+        color: #e0b5a8;
+      }
+
+      .action-btn sub {
+        font-size: 9px;
+        opacity: 0.72;
+      }
+
+      /* Bottom bar of casing (PRAY / START & Weapon Status) */
+      .console-lower-deck {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 12px;
+        gap: 10px;
+      }
+
+      .weapon-slot-strip {
+        display: flex;
+        gap: 6px;
+        font-family: monospace;
+        font-size: 10px;
+      }
+
+      .weapon-pill {
+        padding: 3px 7px;
+        border-radius: 3px;
+        background: #17191c;
+        border: 1px solid #2e3238;
+        color: #595e66;
+      }
+
+      .weapon-pill.unlocked {
+        color: #9aa391;
+        border-color: #464d40;
+      }
+
+      .weapon-pill.active {
+        background: #333a29;
+        border-color: #8b956d;
+        color: #e4ebd0;
+      }
+
+      .pray-btn {
+        padding: 6px 18px;
+        border-radius: 14px;
+        font-size: 10px;
+        letter-spacing: 0.08em;
+      }
+
+      .pray-btn.ready {
+        border-color: #c95634;
+        color: #f5d0c5;
+        animation: pulse-pray 0.9s infinite alternate;
+      }
+
+      @keyframes pulse-pray {
+        from {
+          box-shadow: 0 3px 0 #121417, 0 0 4px rgba(201, 86, 52, 0.3);
+        }
+        to {
+          box-shadow: 0 3px 0 #121417, 0 0 14px rgba(235, 95, 52, 0.85);
+        }
+      }
+
+      /* Reality Erosion Subtitle Area (Outer Frame) */
+      .reality-erosion-area {
+        width: 100%;
+        max-width: 760px;
+        min-height: 54px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 4px 14px;
+        z-index: 5;
+      }
+
+      #reality-subtitle {
+        font-size: clamp(13px, 2.2vw, 16px);
+        line-height: 1.55;
+        letter-spacing: 0.07em;
+        color: #ded6cc;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
+        opacity: 0;
+        transition: opacity 0.65s ease;
+      }
+
+      #reality-subtitle.visible {
+        opacity: 1;
+      }
+
+      .key-hint {
+        margin-top: 4px;
+        font-family: monospace;
+        font-size: 10px;
+        color: #6e6862;
+      }
+
+      /* Responsive layout for Smartphones / Portrait screens */
+      @media (max-width: 680px) {
+        #handheld-casing {
+          padding: 12px 12px 14px;
+          gap: 10px;
+        }
+
+        .console-upper-deck {
+          grid-template-columns: 1fr 1fr;
+          grid-template-areas:
+            'screen screen'
+            'dpad actions';
+          gap: 10px;
+        }
+
+        .screen-bezel {
+          grid-area: screen;
+        }
+
+        .controls-wing.left-wing {
+          grid-area: dpad;
+        }
+
+        .controls-wing.right-wing {
+          grid-area: actions;
+        }
+
+        .console-lower-deck {
+          flex-direction: column;
+          gap: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="police-strobe"></div>
+
+    <main id="reality-frame">
+      <!-- Top bar: Mode toggle (Original FLCL vs. Copyright-clean Homage) & Audio toggle -->
+      <header class="outer-top-bar">
+        <button id="mode-toggle-btn" class="utility-btn" type="button">
+          MODE: ORIGINAL (原作準拠)
+        </button>
+        <span id="day-outer-indicator">EVENING RIVERBED // DAY 01</span>
+        <button id="sound-toggle-btn" class="utility-btn" type="button">
+          SOUND: ON
+        </button>
+      </header>
+
+      <!-- Handheld Game Console (WonderSwan style) -->
+      <section id="handheld-casing" aria-label="Handheld Game Console">
+        <div class="console-upper-deck">
+          <!-- Left Wing: Physical D-Pad -->
+          <div class="controls-wing left-wing">
+            <div class="dpad-container">
+              <button
+                class="hw-btn dpad-btn dpad-up"
+                data-action="up"
+                type="button"
+                aria-label="Move Up"
+              >
+                ▲
+              </button>
+              <button
+                class="hw-btn dpad-btn dpad-down"
+                data-action="down"
+                type="button"
+                aria-label="Move Down"
+              >
+                ▼
+              </button>
+              <button
+                class="hw-btn dpad-btn dpad-left"
+                data-action="left"
+                type="button"
+                aria-label="Move Left"
+              >
+                ◀
+              </button>
+              <button
+                class="hw-btn dpad-btn dpad-right"
+                data-action="right"
+                type="button"
+                aria-label="Move Right"
+              >
+                ▶
+              </button>
               <div class="dpad-center"></div>
-              <div class="dpad-btn dpad-right" data-dir="right">▶</div>
-              <div class="dpad-btn dpad-down" data-dir="down">▼</div>
+            </div>
+          </div>
+
+          <!-- Center: 4-Tone Reflective LCD Viewport -->
+          <div class="screen-bezel">
+            <div class="bezel-header">
+              <span>WONDERSWAN // FIRE STARTER</span>
+              <span class="power-led">
+                <span id="power-led-dot" class="led-dot"></span>
+                <span id="alert-status-label">BATTERY</span>
+              </span>
+            </div>
+
+            <div class="lcd-glass-frame">
+              <canvas id="lcd-canvas" width="224" height="144"></canvas>
+            </div>
+
+            <div class="bezel-gauges">
+              <div class="gauge-box">
+                <div class="gauge-label-row">
+                  <span>SUFFOCATION (閉塞度)</span>
+                  <span id="suf-val-text">40%</span>
+                </div>
+                <div class="gauge-track">
+                  <div id="suf-bar-fill" class="gauge-fill"></div>
+                </div>
+              </div>
+              <div class="gauge-box">
+                <div class="gauge-label-row">
+                  <span>DESTRUCTION (焼失率)</span>
+                  <span id="dst-val-text">0%</span>
+                </div>
+                <div class="gauge-track">
+                  <div id="dst-bar-fill" class="gauge-fill"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Wing: Physical Action Buttons -->
+          <div class="controls-wing right-wing">
+            <div class="action-buttons">
+              <button
+                id="btn-fire"
+                class="hw-btn action-btn fire-btn"
+                data-action="fire"
+                type="button"
+              >
+                <span>FIRE [A]</span>
+                <sub id="active-weapon-label">1. マッチ</sub>
+              </button>
+              <button
+                id="btn-weapon"
+                class="hw-btn action-btn"
+                data-action="weapon"
+                type="button"
+              >
+                <span>WEAPON [B]</span>
+                <sub>アイテム切替</sub>
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Action Buttons A & B (Right Side) -->
-        <div id="action-buttons-wrapper">
-          <div class="action-btn-slot">
-            <button id="btn-b" class="action-btn" aria-label="B button">B</button>
-            <span class="btn-subtext">ITEM/DASH</span>
+        <!-- Lower Deck: Weapon Escalation Indicators & PRAY [START] -->
+        <div class="console-lower-deck">
+          <div id="weapon-slots" class="weapon-slot-strip">
+            <span class="weapon-pill unlocked active" data-widx="0">1.マッチ</span>
+            <span class="weapon-pill" data-widx="1">2.ライター</span>
+            <span class="weapon-pill" data-widx="2">3.火炎瓶</span>
+            <span class="weapon-pill" data-widx="3">4.爆弾</span>
           </div>
-          <div class="action-btn-slot">
-            <button id="btn-a" class="action-btn" aria-label="A button">A</button>
-            <span class="btn-subtext">IGNITE</span>
-          </div>
+
+          <button
+            id="btn-pray"
+            class="hw-btn pray-btn"
+            data-action="pray"
+            type="button"
+          >
+            PRAY [START / C] — 黒き炎の祈り
+          </button>
         </div>
-      </div>
+      </section>
 
-      <!-- Bottom Bar: SELECT, START, MUTE & Speaker Grille -->
-      <div id="sub-controls-container">
-        <div class="pill-btn-group">
-          <div class="pill-slot">
-            <button id="btn-select" class="pill-btn" aria-label="Select button"></button>
-            <span class="pill-label">SELECT</span>
-          </div>
-          <div class="pill-slot">
-            <button id="btn-start" class="pill-btn" aria-label="Start button"></button>
-            <span class="pill-label">START</span>
-          </div>
-          <div class="pill-slot">
-            <button id="btn-mute" class="pill-btn mute-btn" aria-label="Mute toggle"></button>
-            <span class="pill-label">MUTE</span>
-          </div>
-        </div>
+      <!-- Reality Erosion Subtitle Layer -->
+      <footer class="reality-erosion-area">
+        <p id="reality-subtitle" class="visible">「……川の水、ぬるいな」</p>
+        <p class="key-hint">
+          [WASD / 矢印]: 移動 &nbsp;|&nbsp; [Z / Space]: 着火 (FIRE) &nbsp;|&nbsp; [X]:
+          武器切替 &nbsp;|&nbsp; [C / Enter]: 祈り (危機時)
+        </p>
+      </footer>
+    </main>
 
-        <!-- Speaker Grille -->
-        <div id="speaker-grille">
-          <div class="grille-line"></div>
-          <div class="grille-line"></div>
-          <div class="grille-line"></div>
-          <div class="grille-line"></div>
-          <div class="grille-line"></div>
-          <div class="grille-line"></div>
-        </div>
-      </div>
-
-      <!-- Keyboard Guide (Shown neatly on PC/Desktop) -->
-      <div id="desktop-instructions">
-        <span>PC操作: [矢印キー/WASD] 移動・難易度切替 | [Z/Space] Aボタン(放火/決定) | [X/Shift] Bボタン(切替/ダッシュ) | [Enter] START | [Tab] SELECT(色変更) | [M] 音声切替 | [P] オートプレイ</span>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="./js/main.js"></script>
-</body>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

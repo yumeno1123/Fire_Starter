@@ -1,21 +1,15 @@
 {
-  "name": "flcl-fire-starter",
-  "version": "1.6.2",
-  "description": "FLCL Fire Starter Mobile Web Game PWA",
-  "main": "js/main.js",
+  "name": "fire-starter",
+  "private": true,
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.js",
-    "simulate": "node scripts/simulate.js",
-    "start": "node server.js"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
-  "keywords": [
-    "flcl",
-    "fire-starter",
-    "pwa",
-    "canvas",
-    "retro-game"
-  ],
-  "author": "Antigravity",
-  "license": "MIT"
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.2.0"
+  }
 }
