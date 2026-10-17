@@ -55,6 +55,7 @@ export interface Police {
   dirX: number;
   dirY: number;
   isChasing: boolean;
+  stunTimerSec: number;
 }
 
 export interface VisualEffect {
@@ -82,8 +83,8 @@ export class GameState {
   public roadCells: Cell[] = [];
 
   public player: Player = {
-    x: 14,
-    y: 13,
+    x: 14.5,
+    y: 6.5,
     facing: { dx: 0, dy: -1 },
     weaponIndex: 0,
     cooldownSec: 0,
@@ -100,6 +101,7 @@ export class GameState {
   public elapsedSec: number = 0;
   public day: number = 1;
   public policeAlertTimerSec: number = 0;
+  public arrestContactTimerSec: number = 0;
   public proliferationTimerSec: number = 0;
 
   public narrationText: string = '';
@@ -139,6 +141,7 @@ export class GameState {
     this.elapsedSec = 0;
     this.day = 1;
     this.policeAlertTimerSec = 0;
+    this.arrestContactTimerSec = 0;
     this.proliferationTimerSec = 0;
     this.isManifesting = false;
     this.manifestTimerSec = 0;
@@ -152,7 +155,7 @@ export class GameState {
 
     this.player = {
       x: 14.5,
-      y: 13.5,
+      y: 6.5,
       facing: { dx: 0, dy: -1 },
       weaponIndex: 0,
       cooldownSec: 0,
@@ -217,27 +220,19 @@ export class GameState {
       Array.from({ length: cols }, () => 'LOT' as TerrainType),
     );
 
-    // 1. Place horizontal river across rows 8 and 9 (2 * 28 = 56 cells),
-    // with two 2-wide bridges at x = 7..8 and x = 19..20 (56 - 8 = 48 river cells)
     const bridgeCols = new Set([7, 8, 19, 20]);
-    let riverCount = 0;
-
     for (let y = 8; y <= 9; y++) {
       for (let x = 0; x < cols; x++) {
         if (bridgeCols.has(x)) continue;
         grid[y][x] = 'RIVER';
-        riverCount++;
       }
     }
 
-    // Add river banks / outer water edges at top-left & top-right corners to reach exactly 64 RIVER cells (+16)
     for (let x = 0; x < 8; x++) {
       grid[0][x] = 'RIVER';
       grid[0][cols - 1 - x] = 'RIVER';
-      riverCount += 2;
     }
 
-    // 2. Place arterial roads (exactly 120 ROAD cells)
     let roadCount = 0;
     const setRoad = (x: number, y: number): void => {
       if (x < 0 || x >= cols || y < 0 || y >= rows) return;
@@ -247,26 +242,22 @@ export class GameState {
       roadCount++;
     };
 
-    // Bridges first
     for (const bx of bridgeCols) {
       setRoad(bx, 8);
       setRoad(bx, 9);
     }
 
-    // Horizontal main streets at y = 4 and y = 13
     for (let x = 0; x < cols; x++) {
       setRoad(x, 4);
       setRoad(x, 13);
     }
 
-    // Vertical avenues at x = 7, 14, 20
     for (let y = 1; y < rows - 1; y++) {
       setRoad(7, y);
       setRoad(14, y);
       setRoad(20, y);
     }
 
-    // Secondary cross-alleys to hit exactly 120 road cells
     for (let x = 2; x < cols - 2; x++) {
       setRoad(x, 16);
       setRoad(x, 1);
@@ -282,17 +273,17 @@ export class GameState {
     for (let i = 0; i < initialCount && i < shuffled.length; i++) {
       const cell = shuffled[i];
       const roll = Math.random();
-      if (roll < 0.7) {
+      if (roll < 0.72) {
         this.setBuildingState(cell, 1);
-      } else if (roll < 0.93) {
+      } else if (roll < 0.94) {
         this.setBuildingState(cell, 2);
       } else {
         this.setBuildingState(cell, 3);
       }
     }
 
-    // Ensure at least one building is right next to the starting position (14, 13)
-    const starterCell = this.getCell(13, 12) ?? this.getCell(15, 12);
+    // Ensure at least one building is right next to the starting position (14.5, 6.5)
+    const starterCell = this.getCell(13, 6) ?? this.getCell(15, 6);
     if (starterCell && starterCell.terrain === 'LOT') {
       this.setBuildingState(starterCell, 1);
     }
@@ -382,13 +373,11 @@ export class GameState {
   private completeCantiManifestation(): void {
     this.isManifesting = false;
     this.policeAlertTimerSec = 0;
+    this.arrestContactTimerSec = 0;
 
-    // Eliminate all Police and Firefighters, then respawn minimum at far edges
     this.police = [];
     this.firefighters = [];
 
-    // Rebalance buildable cells so Destruction = 50% (160 ASH/BURNING out of 320)
-    // and Suffocation = 50%
     const shuffled = [...this.buildableCells].sort(() => Math.random() - 0.5);
     const targetAshCount = Math.floor(CONFIG.TOTAL_BUILDABLE_CELLS * 0.5);
 
@@ -399,8 +388,8 @@ export class GameState {
         cell.buildingLevel = 0;
         cell.durability = 0;
         cell.maxDurability = 0;
-        cell.ashTimerSec = Math.random() * 14;
-      } else if (i < targetAshCount + 65) {
+        cell.ashTimerSec = Math.random() * 6;
+      } else if (i < targetAshCount + 55) {
         this.setBuildingState(cell, 1);
       } else {
         cell.state = 'EMPTY';
@@ -414,7 +403,6 @@ export class GameState {
     this.suffocation = 50;
     this.destruction = 50;
 
-    // Whisper in the outer reality frame right after manifestation
     this.realityText = TEXT_PACKS[this.textMode].climax.aftermathWhisper;
     this.realityTextVisibleSec = 5.0;
     this.realityTextTimerSec = CONFIG.TIME.REALITY_TEXT_INTERVAL_SEC;
@@ -427,6 +415,10 @@ export class GameState {
     const weapon = this.getCurrentWeapon();
     const ignitedAny = this.applyWeaponIgnition(weapon);
     if (!ignitedAny) return false;
+
+    if (this.narrationTimerSec > 0.6) {
+      this.narrationTimerSec = 0.6;
+    }
 
     this.player.cooldownSec = weapon.cooldownSec;
     this.policeAlertTimerSec = CONFIG.ACTORS.POLICE_ALERT_DURATION_SEC;
@@ -457,13 +449,11 @@ export class GameState {
     if (weapon.id === 'molotov') {
       const centerX = this.clampCol(px + dx * 3);
       const centerY = this.clampRow(py + dy * 3);
-      let count = 0;
       for (let oy = -1; oy <= 1; oy++) {
         for (let ox = -1; ox <= 1; ox++) {
           const cell = this.getCell(centerX + ox, centerY + oy);
           if (cell && cell.terrain === 'LOT' && cell.state !== 'ASH') {
             this.igniteCell(cell, weapon, false);
-            count++;
           }
         }
       }
@@ -477,10 +467,9 @@ export class GameState {
         timerSec: 0,
         durationSec: 0.38,
       });
-      return count > 0 || true;
+      return true;
     }
 
-    // Bomb: 5x5 area around player (inner 3x3 instant ash/heavy fire, outer 5x5 burning)
     for (let oy = -2; oy <= 2; oy++) {
       for (let ox = -2; ox <= 2; ox++) {
         const cell = this.getCell(px + ox, py + oy);
@@ -519,7 +508,6 @@ export class GameState {
       [px - 1, py + 1],
     ];
 
-    // Prefer cells with buildings first
     for (const [cx, cy] of candidates) {
       const cell = this.getCell(cx, cy);
       if (
@@ -533,7 +521,6 @@ export class GameState {
       }
     }
 
-    // Otherwise allow lighting dry grass on an EMPTY buildable lot
     for (const [cx, cy] of candidates) {
       const cell = this.getCell(cx, cy);
       if (cell && cell.terrain === 'LOT' && cell.state === 'EMPTY') {
@@ -596,7 +583,7 @@ export class GameState {
     this.updateCellsAndFireSpread(dt);
     this.syncNpcCounts();
     this.updateFirefighters(dt);
-    this.updatePolice(dt, audio);
+    this.updatePolice(dt, moveInput, audio);
     this.updateGauges(dt, audio);
     this.updateEffects(dt);
   }
@@ -659,6 +646,11 @@ export class GameState {
     const { dx, dy } = moveInput;
     if (dx === 0 && dy === 0) return;
 
+    // Quickly fade narration overlay once the player starts moving
+    if (this.narrationTimerSec > 0.75) {
+      this.narrationTimerSec = Math.max(0.75, this.narrationTimerSec - dt * 2.5);
+    }
+
     const length = Math.hypot(dx, dy);
     const normX = dx / length;
     const normY = dy / length;
@@ -696,20 +688,21 @@ export class GameState {
   }
 
   private updateProliferation(dt: number): void {
-    this.proliferationTimerSec += dt;
+    // Slow down building proliferation when Suffocation is already high
+    const highSufDamping = this.suffocation > 70 ? 0.5 : 1.0;
+    this.proliferationTimerSec += dt * highSufDamping;
+
     if (this.proliferationTimerSec < CONFIG.BUILDING.PROLIFERATION_INTERVAL_SEC) {
       return;
     }
     this.proliferationTimerSec -= CONFIG.BUILDING.PROLIFERATION_INTERVAL_SEC;
 
-    // 1. Spawn a new BUILDING_1 on a random EMPTY cell
     const emptyCells = this.buildableCells.filter((c) => c.state === 'EMPTY');
     if (emptyCells.length > 0) {
       const target = emptyCells[Math.floor(Math.random() * emptyCells.length)];
       this.setBuildingState(target, 1);
     }
 
-    // 2. With probability, upgrade an existing building to level 2 or 3
     if (Math.random() < CONFIG.BUILDING.UPGRADE_CHANCE_ON_TICK) {
       const upgradable = this.buildableCells.filter(
         (c) => c.state === 'BUILDING_1' || c.state === 'BUILDING_2',
@@ -724,6 +717,12 @@ export class GameState {
 
   private updateCellsAndFireSpread(dt: number): void {
     const newlyIgnited: Array<{ cell: Cell; prob: number; dmg: number }> = [];
+
+    // Automatically dampen fire spread when Destruction > 60% so the city doesn't accidentally hit 100%
+    const spreadDamping =
+      this.destruction > 60
+        ? Math.max(0.08, 1 - (this.destruction - 60) / 32)
+        : 1.0;
 
     for (const cell of this.buildableCells) {
       cell.flickerPhase += dt * 12;
@@ -749,7 +748,6 @@ export class GameState {
         continue;
       }
 
-      // Check 4-neighbor fire spread
       const neighbors = [
         this.getCell(cell.x + 1, cell.y),
         this.getCell(cell.x - 1, cell.y),
@@ -765,7 +763,7 @@ export class GameState {
           nb.state === 'BUILDING_3';
         if (!isFlammable) continue;
 
-        if (Math.random() < cell.spreadProbPerSec * dt) {
+        if (Math.random() < cell.spreadProbPerSec * spreadDamping * dt) {
           newlyIgnited.push({
             cell: nb,
             prob: cell.spreadProbPerSec,
@@ -787,11 +785,11 @@ export class GameState {
     const targetFirefighters = Math.min(
       CONFIG.ACTORS.MAX_FIREFIGHTER_COUNT,
       CONFIG.ACTORS.INITIAL_FIREFIGHTER_COUNT +
-        Math.floor((this.day - 1) * 0.7 + this.destruction / 22),
+        Math.floor((this.day - 1) * 0.4 + this.destruction / 30),
     );
 
     while (this.firefighters.length < targetFirefighters) {
-      const spawn = this.pickFarRoadCell(7.0);
+      const spawn = this.pickFarRoadCell(8.0);
       this.firefighters.push({
         id: this.nextNpcId++,
         x: spawn.x + 0.5,
@@ -805,11 +803,11 @@ export class GameState {
     const targetPolice = Math.min(
       CONFIG.ACTORS.MAX_POLICE_COUNT,
       CONFIG.ACTORS.INITIAL_POLICE_COUNT +
-        Math.floor((this.day - 1) * 0.5 + this.destruction / 30),
+        Math.floor((this.day - 1) * 0.25 + this.destruction / 45),
     );
 
     while (this.police.length < targetPolice) {
-      const spawn = this.pickFarRoadCell(8.5);
+      const spawn = this.pickFarRoadCell(10.0);
       this.police.push({
         id: this.nextNpcId++,
         x: spawn.x + 0.5,
@@ -817,6 +815,7 @@ export class GameState {
         dirX: 1,
         dirY: 0,
         isChasing: false,
+        stunTimerSec: 0,
       });
     }
   }
@@ -836,11 +835,10 @@ export class GameState {
       ff.isExtinguishing = false;
 
       if (burningCells.length === 0) {
-        this.patrolActor(ff, dt, CONFIG.ACTORS.FIREFIGHTER_SPEED_CELLS_PER_SEC * 0.6);
+        this.patrolActor(ff, dt, CONFIG.ACTORS.FIREFIGHTER_SPEED_CELLS_PER_SEC * 0.55);
         continue;
       }
 
-      // Find nearest BURNING cell by Manhattan distance
       let nearest = burningCells[0];
       let bestDist =
         Math.abs(nearest.x + 0.5 - ff.x) + Math.abs(nearest.y + 0.5 - ff.y);
@@ -902,39 +900,109 @@ export class GameState {
     }
   }
 
-  private updatePolice(dt: number, audio?: AudioCallbacks): void {
+  private updatePolice(
+    dt: number,
+    moveInput: Direction,
+    audio?: AudioCallbacks,
+  ): void {
     const basePlayerSpeed = CONFIG.ACTORS.PLAYER_SPEED_CELLS_PER_SEC;
+    const isPlayerMoving = moveInput.dx !== 0 || moveInput.dy !== 0;
+    let touchingAnyCop = false;
 
     for (const cop of this.police) {
+      if (cop.stunTimerSec > 0) {
+        cop.stunTimerSec = Math.max(0, cop.stunTimerSec - dt);
+        cop.isChasing = false;
+        continue;
+      }
+
       const distToPlayer = Math.hypot(this.player.x - cop.x, this.player.y - cop.y);
 
-      // Check immediate arrest contact (same grid cell overlap)
-      if (distToPlayer < 0.52) {
-        this.badEnd = 'arrested';
-        audio?.onBadEnd('arrested');
-        return;
+      if (distToPlayer < 0.45) {
+        if (isPlayerMoving) {
+          // Moving player slips past and shoves the police officer back (2.5s stun)
+          cop.stunTimerSec = 2.5;
+          cop.isChasing = false;
+          const pushX = cop.x + (cop.x - this.player.x) * 2.4;
+          const pushY = cop.y + (cop.y - this.player.y) * 2.4;
+          if (this.isWalkableForNpc(pushX, pushY, false)) {
+            cop.x = pushX;
+            cop.y = pushY;
+          }
+          continue;
+        }
+        touchingAnyCop = true;
+      }
+
+      // Police flinch and retreat if a burning cell is nearby
+      const nearbyFire = this.findNearbyBurningCell(cop.x, cop.y, 2.0);
+      if (nearbyFire) {
+        cop.isChasing = false;
+        const awayX = cop.x + (cop.x - (nearbyFire.x + 0.5));
+        const awayY = cop.y + (cop.y - (nearbyFire.y + 0.5));
+        this.moveNpcToward(
+          cop,
+          awayX,
+          awayY,
+          basePlayerSpeed * CONFIG.ACTORS.POLICE_NORMAL_SPEED_RATIO,
+          dt,
+          true,
+        );
+        continue;
       }
 
       const inSight = distToPlayer <= CONFIG.ACTORS.POLICE_SIGHT_RADIUS;
-      const isAlerted = this.policeAlertTimerSec > 0;
-      cop.isChasing = inSight || isAlerted;
+      const inHearingRange =
+        this.policeAlertTimerSec > 0 &&
+        distToPlayer <= CONFIG.ACTORS.POLICE_ALERT_HEARING_RADIUS;
+      cop.isChasing = inSight || inHearingRange;
 
       if (cop.isChasing) {
-        const speedRatio = isAlerted
-          ? CONFIG.ACTORS.POLICE_ALERT_SPEED_RATIO
-          : CONFIG.ACTORS.POLICE_NORMAL_SPEED_RATIO;
         this.moveNpcToward(
           cop,
           this.player.x,
           this.player.y,
-          basePlayerSpeed * speedRatio,
+          basePlayerSpeed * CONFIG.ACTORS.POLICE_ALERT_SPEED_RATIO,
           dt,
           true,
         );
       } else {
-        this.patrolPoliceOnRoad(cop, basePlayerSpeed * CONFIG.ACTORS.POLICE_NORMAL_SPEED_RATIO, dt);
+        this.patrolPoliceOnRoad(
+          cop,
+          basePlayerSpeed * CONFIG.ACTORS.POLICE_NORMAL_SPEED_RATIO,
+          dt,
+        );
       }
     }
+
+    // Only arrest if the player stands still in contact with police for 2.2s
+    if (touchingAnyCop) {
+      this.arrestContactTimerSec += dt;
+      if (this.arrestContactTimerSec >= 2.2) {
+        this.badEnd = 'arrested';
+        audio?.onBadEnd('arrested');
+      }
+    } else {
+      this.arrestContactTimerSec = Math.max(0, this.arrestContactTimerSec - dt * 3.0);
+    }
+  }
+
+  private findNearbyBurningCell(x: number, y: number, radius: number): Cell | null {
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    for (let oy = -2; oy <= 2; oy++) {
+      for (let ox = -2; ox <= 2; ox++) {
+        const cell = this.getCell(cx + ox, cy + oy);
+        if (
+          cell &&
+          cell.state === 'BURNING' &&
+          Math.hypot(cell.x + 0.5 - x, cell.y + 0.5 - y) <= radius
+        ) {
+          return cell;
+        }
+      }
+    }
+    return null;
   }
 
   private moveNpcToward(
@@ -948,7 +1016,6 @@ export class GameState {
     let goalX = targetX;
     let goalY = targetY;
 
-    // If actor and target are on opposite sides of the river (rows 8..9), route via nearest bridge (x = 7.5 or x = 19.5)
     const actorAboveRiver = actor.y < 8.0;
     const actorBelowRiver = actor.y > 10.0;
     const targetAboveRiver = targetY < 8.0;
@@ -978,7 +1045,11 @@ export class GameState {
     }
   }
 
-  private patrolActor(actor: { x: number; y: number; targetX: number; targetY: number }, dt: number, speed: number): void {
+  private patrolActor(
+    actor: { x: number; y: number; targetX: number; targetY: number },
+    dt: number,
+    speed: number,
+  ): void {
     const dist = Math.hypot(actor.targetX - actor.x, actor.targetY - actor.y);
     if (dist < 0.6) {
       const road = this.roadCells[Math.floor(Math.random() * this.roadCells.length)];
@@ -1049,21 +1120,23 @@ export class GameState {
       }
     }
 
-    // 1. Suffocation differential formula:
-    // ΔS = +0.8 + (N_building / N_total) * 3.5 - N_burning * 0.45
-    const deltaSuffocationPerSec =
+    let deltaSuffocationPerSec =
       CONFIG.GAUGE.SUFFOCATION_BASE_RATE +
       (weightedBuildings / CONFIG.TOTAL_BUILDABLE_CELLS) *
         CONFIG.GAUGE.SUFFOCATION_BUILDING_FACTOR -
       burningCount * CONFIG.GAUGE.SUFFOCATION_BURNING_RELIEF;
+
+    // Gentle damping near high Suffocation so player has ample time to light a fire
+    if (deltaSuffocationPerSec > 0 && this.suffocation > 75) {
+      const damping = Math.max(0.22, 1 - (this.suffocation - 75) / 28);
+      deltaSuffocationPerSec *= damping;
+    }
 
     this.suffocation = Math.max(
       0,
       Math.min(100, this.suffocation + deltaSuffocationPerSec * dt),
     );
 
-    // 2. Destruction formula:
-    // D = ((N_burning + N_ash) / N_total) * 100
     this.destruction = Math.max(
       0,
       Math.min(

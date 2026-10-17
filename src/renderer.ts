@@ -56,18 +56,20 @@ export class Renderer {
     // 3. Draw visual effects (molotov arc, ignition flash, bomb shockwave)
     this.drawEffects(state);
 
-    // 4. Draw NPCs (Firefighters & Police) and Player
+    // 4. Draw NPCs (Firefighters & Police)
     this.drawFirefighters(state);
     this.drawPolice(state);
-    this.drawPlayer(state);
 
-    // 5. Draw LCD Top HUD Bar & Bottom Myth Narration Box
+    // 5. Draw LCD Top HUD Bar & Myth Narration Box (positioned away from player)
     this.drawTopHud(state);
     if (state.narrationTimerSec > 0) {
       this.drawNarrationOverlay(state);
     }
 
-    // 6. Overlay 1px LCD dot-matrix grid
+    // 6. Always draw Player on top so player is never hidden
+    this.drawPlayer(state);
+
+    // 7. Overlay 1px LCD dot-matrix grid
     this.drawLcdDotGrid();
   }
 
@@ -270,9 +272,16 @@ export class Renderer {
     const px = Math.floor(state.player.x * cs) - 3;
     const py = Math.floor(state.player.y * cs) - 3;
 
-    // White outline so player is always distinguishable amidst buildings
+    // Bright halo outline so player is always clearly visible
     this.ctx.fillStyle = COLOR_0;
-    this.ctx.fillRect(px, py - 1, 6, 8);
+    this.ctx.fillRect(px - 1, py - 1, 8, 9);
+
+    // Initial spawn locator ring during the first 4 seconds
+    if (state.elapsedSec < 4.0 && Math.floor(state.elapsedSec * 6) % 2 === 0) {
+      this.ctx.strokeStyle = COLOR_3;
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(px - 3, py - 3, 12, 13);
+    }
 
     // Dark silhouette body
     this.ctx.fillStyle = COLOR_3;
@@ -307,7 +316,7 @@ export class Renderer {
 
     this.ctx.fillText(dayStr, 3, 1);
 
-    // Blink SUF or DST if critical (>= 80%)
+    // Blink SUF or DST if critical (>= DANGER_THRESHOLD)
     const blinkOff = Math.floor(state.elapsedSec * 6) % 2 === 1;
     if (!(state.suffocation >= CONFIG.GAUGE.DANGER_THRESHOLD && blinkOff)) {
       this.ctx.fillText(sufStr, 28, 1);
@@ -332,13 +341,15 @@ export class Renderer {
   }
 
   private drawNarrationOverlay(state: GameState): void {
-    const { COLOR_0, COLOR_2, COLOR_3 } = CONFIG.PALETTE;
+    const { COLOR_0, COLOR_2 } = CONFIG.PALETTE;
     const boxX = 6;
-    const boxY = 104;
+    // Dynamically place narration in bottom half if player is in top half, or top half if player is in bottom half
+    const boxY = state.player.y < 9.5 ? 111 : 11;
     const boxW = CONFIG.LCD_WIDTH - 12;
-    const boxH = 35;
+    const boxH = 29;
 
-    this.ctx.fillStyle = COLOR_3;
+    const alpha = Math.min(0.8, Math.max(0.25, state.narrationTimerSec * 0.6));
+    this.ctx.fillStyle = `rgba(27, 30, 18, ${alpha.toFixed(2)})`;
     this.ctx.fillRect(boxX, boxY, boxW, boxH);
     this.ctx.strokeStyle = COLOR_0;
     this.ctx.lineWidth = 1;
@@ -347,7 +358,7 @@ export class Renderer {
     const elapsedInNarration = state.narrationTotalSec - state.narrationTimerSec;
     const charCount = Math.min(
       state.narrationText.length,
-      Math.floor(elapsedInNarration * 32) + 4,
+      Math.floor(elapsedInNarration * 36) + 6,
     );
     const visibleText = state.narrationText.slice(0, charCount);
 
@@ -355,13 +366,13 @@ export class Renderer {
     this.ctx.font = '8px serif';
     this.ctx.textBaseline = 'top';
 
-    const lines = this.wrapText(visibleText, 24);
-    lines.slice(0, 3).forEach((line, idx) => {
-      this.ctx.fillText(line, boxX + 6, boxY + 5 + idx * 10);
+    const lines = this.wrapText(visibleText, 25);
+    lines.slice(0, 2).forEach((line, idx) => {
+      this.ctx.fillText(line, boxX + 6, boxY + 4 + idx * 10);
     });
 
     this.ctx.fillStyle = COLOR_2;
-    this.ctx.fillRect(boxX + boxW - 7, boxY + boxH - 6, 3, 3);
+    this.ctx.fillRect(boxX + boxW - 6, boxY + boxH - 5, 2, 2);
   }
 
   private renderCantiManifestation(state: GameState, dt: number): void {
